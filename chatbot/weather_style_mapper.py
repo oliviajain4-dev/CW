@@ -144,6 +144,8 @@ def get_style_recommendation(tmp: float, reh: float, sky: int, pty: int,
     elif humidity == "low":
         humidity_note = "건조해요. 정전기 방지 소재를 고려해보세요."
 
+    hair_shoe_acc = get_hair_shoe_acc(temp_range, precip, humidity)
+
     return {
         "condition_label": condition_label,
         "temp_range": temp_range,
@@ -153,7 +155,10 @@ def get_style_recommendation(tmp: float, reh: float, sky: int, pty: int,
         "recommended_items": recommended_items,
         "avoid_items": avoid_items,
         "comfort_point": comfort_point,
-        "humidity_note": humidity_note
+        "humidity_note": humidity_note,
+        "hair_rec": hair_shoe_acc["hair"],
+        "shoe_rec": hair_shoe_acc["shoe"],
+        "acc_rec":  hair_shoe_acc["acc"],
     }
 
 
@@ -188,3 +193,59 @@ def get_layering_recommendation(weather: dict, sensitivity: int = 3) -> dict:
         "layering_tip": f"일교차 {temp_diff:.0f}도예요. 아침엔 {base['condition_label']} 기준으로 입고, "
                         f"낮엔 {afternoon_rec['recommended_items'][0]} 정도로 조절하세요."
     }
+
+
+def get_hair_shoe_acc(temp_range: str, precip: str, humidity: str) -> dict:
+    """
+    날씨 조건에 따른 헤어·신발·악세서리 추천
+    """
+    # ── 헤어 ───────────────────────────────────────
+    if precip in ["rain", "shower", "sleet"]:
+        if humidity == "high":
+            hair = "업스타일(번, 포니테일)로 습기로 인한 헝클어짐 방지. 헤어 왁스로 잔머리 정리."
+        else:
+            hair = "비에 강한 업스타일 또는 모자 착용. 방습 헤어 에센스 필수."
+    elif precip == "snow":
+        hair = "모자(비니·울 햇) 착용 추천. 정전기 방지 트리트먼트 사용."
+    elif temp_range in ["freezing", "very_cold"]:
+        hair = "귀마개 또는 비니 착용 추천. 두피 보호를 위해 오일 에센스 마무리."
+    elif temp_range in ["cold", "cool"]:
+        hair = "자연스러운 웨이브나 스트레이트. 건조한 날씨엔 헤어 오일로 광택감 추가."
+    elif temp_range in ["mild", "warm"]:
+        hair = "가볍게 흘려 내린 스타일. 스프레이로 가볍게 고정."
+    else:  # hot, very_hot
+        hair = "업스타일(높은 번, 포니테일)로 시원하게. 두피 자외선 차단 스프레이 추천."
+
+    # ── 신발 ───────────────────────────────────────
+    if precip in ["rain", "shower"]:
+        shoe = "방수 첼시 부츠 또는 방수 스니커즈. 화이트·스웨이드·캔버스 소재 피하기."
+    elif precip == "sleet":
+        shoe = "방수 앵클 부츠(발목 이상). 미끄럼 방지 밑창 필수."
+    elif precip == "snow":
+        shoe = "방수 워커 부츠(발목 이상). 스노우 부츠 또는 방수 트레킹 슈즈."
+    elif temp_range == "freezing":
+        shoe = "두꺼운 워커 부츠. 양말 2겹 착용으로 발 보온."
+    elif temp_range == "very_cold":
+        shoe = "앵클 부츠 또는 워커. 울 소재 두꺼운 양말 매치."
+    elif temp_range in ["cold", "cool"]:
+        shoe = "스니커즈 또는 앵클 부츠. 두꺼운 양말로 보온."
+    elif temp_range in ["mild", "warm"]:
+        shoe = "스니커즈, 로퍼, 옥스퍼드. 얇은 양말 또는 노 삭스."
+    elif temp_range == "hot":
+        shoe = "샌들, 슬리퍼, 슬립온. 발이 트이는 오픈토 스타일 추천."
+    else:  # very_hot
+        shoe = "샌들 또는 슬리퍼. 가능한 한 발이 많이 노출되는 스타일."
+
+    # ── 악세서리 ────────────────────────────────────
+    if precip in ["rain", "shower", "sleet", "snow"]:
+        acc = "접이식 우산 또는 장우산 필수. 방수 소재 토트백 or 백팩 추천."
+    elif temp_range in ["freezing", "very_cold"]:
+        acc = "목도리(머플러) + 장갑 필수. 귀마개 선택. 핸드백보다 양손 자유로운 백팩 추천."
+    elif temp_range in ["cold", "cool"]:
+        acc = "얇은 스카프로 포인트 + 보온. 크로스백 또는 토트백."
+    elif temp_range in ["mild", "warm"]:
+        acc = "가벼운 쥬얼리(귀걸이, 목걸이) 1~2개. 미니백 또는 숄더백."
+    else:  # hot, very_hot
+        acc = "선글라스 + 챙 넓은 모자로 자외선 차단. 미니크로스백으로 가볍게."
+
+    return {"hair": hair, "shoe": shoe, "acc": acc}

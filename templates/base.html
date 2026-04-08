@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}내 옷장의 코디{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <nav class="navbar">
+    <a class="nav-logo" href="{{ url_for('dashboard') }}">👗 내 옷장의 코디</a>
+    <div class="nav-links">
+      <a href="{{ url_for('dashboard') }}">대시보드</a>
+      <a href="{{ url_for('wardrobe') }}">내 옷장</a>
+      <a href="{{ url_for('profile') }}">내 정보</a>
+    </div>
+  </nav>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

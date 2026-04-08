@@ -1,0 +1,308 @@
+/* ── 기본 리셋 & 변수 ─────────────────────────── */
+:root {
+  --primary:   #6c63ff;
+  --primary-d: #574fd6;
+  --danger:    #e74c3c;
+  --bg:        #f4f4f8;
+  --card-bg:   #ffffff;
+  --text:      #2d2d2d;
+  --subtext:   #6b7280;
+  --border:    #e5e7eb;
+  --radius:    12px;
+  --shadow:    0 2px 12px rgba(0,0,0,0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* ── 네비게이션 ─────────────────────────────── */
+.navbar {
+  background: var(--card-bg);
+  box-shadow: var(--shadow);
+  padding: 0 2rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.nav-logo {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.nav-links a {
+  margin-left: 1.5rem;
+  text-decoration: none;
+  color: var(--subtext);
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--primary); }
+
+/* ── 컨테이너 ────────────────────────────────── */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* ── 페이지 헤더 ─────────────────────────────── */
+.page-header { margin-bottom: 2rem; }
+.page-header h1 { font-size: 1.8rem; font-weight: 700; }
+.subtitle { color: var(--subtext); margin-top: 0.3rem; font-size: 0.95rem; }
+
+/* ── 카드 ────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+.card h3 { font-size: 0.95rem; font-weight: 600; margin: 0.8rem 0 0.5rem; }
+
+/* ── 대시보드 그리드 ─────────────────────────── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+.dashboard-grid .card { margin-bottom: 0; }
+
+/* ── 날씨 카드 ──────────────────────────────── */
+.weather-temps {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.temp-block {
+  flex: 1;
+  text-align: center;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 0.8rem;
+}
+.temp-label { display: block; font-size: 0.8rem; color: var(--subtext); }
+.temp-value { display: block; font-size: 1.5rem; font-weight: 700; color: var(--primary); }
+.weather-label {
+  font-size: 1rem; font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.layering-alert {
+  background: #fff3cd; color: #856404;
+  border-radius: 6px; padding: 0.5rem 0.8rem;
+  font-size: 0.88rem; margin-top: 0.5rem;
+}
+.humidity-note {
+  color: var(--subtext); font-size: 0.88rem; margin-top: 0.4rem;
+}
+
+/* ── 추천 아이템 ────────────────────────────── */
+.item-list { list-style: none; }
+.item-list li { padding: 0.35rem 0; font-size: 0.92rem; }
+.item-good::before { content: "✔ "; color: #22c55e; }
+.item-bad::before  { content: "✖ "; color: var(--danger); }
+
+/* ── 헤어/신발/악세서리 카드 ───────────────── */
+.detail-item {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+.detail-icon { font-size: 1.4rem; flex-shrink: 0; }
+.detail-item strong { display: block; font-size: 0.9rem; margin-bottom: 0.2rem; }
+.detail-item p { font-size: 0.88rem; color: var(--subtext); }
+
+/* ── 수석 디자이너 카드 ─────────────────────── */
+.designer-card { border-left: 4px solid var(--primary); }
+.designer-header {
+  display: flex; align-items: center; gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+.designer-avatar { font-size: 2rem; }
+.designer-badge {
+  display: inline-block;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 20px;
+  margin-left: 0.4rem;
+}
+.designer-comment {
+  font-size: 0.97rem;
+  line-height: 1.8;
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+/* ── 챗봇 ────────────────────────────────────── */
+.chat-window {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 1rem;
+  height: 300px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.chat-msg {
+  max-width: 80%;
+  padding: 0.7rem 1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.chat-msg.assistant {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  align-self: flex-start;
+}
+.chat-msg.user {
+  background: var(--primary);
+  color: #fff;
+  align-self: flex-end;
+}
+.chat-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+.chat-input-row input {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+}
+.chat-input-row input:focus { border-color: var(--primary); }
+
+/* ── 폼 ──────────────────────────────────────── */
+.form-card { max-width: 700px; margin: 0 auto; }
+.form-section { margin-bottom: 2rem; }
+.form-section h2 {
+  font-size: 1rem; font-weight: 700;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
+.form-group input,
+.form-group select {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  outline: none;
+  background: var(--card-bg);
+}
+.form-group input:focus,
+.form-group select:focus { border-color: var(--primary); }
+.hint { font-size: 0.78rem; color: var(--subtext); margin-top: 0.4rem; }
+
+/* ── 업로드 영역 ─────────────────────────────── */
+.upload-card { max-width: 600px; }
+.upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  text-align: center;
+  padding: 2rem;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s;
+  position: relative;
+}
+.upload-area:hover { border-color: var(--primary); }
+.upload-area input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer;
+}
+.upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.preview-hidden { display: none; }
+#previewImg img { max-height: 200px; border-radius: 8px; margin-top: 1rem; }
+
+/* ── 옷장 그리드 ─────────────────────────────── */
+.wardrobe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+}
+.wardrobe-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  text-align: center;
+  background: var(--bg);
+}
+.wardrobe-item img {
+  width: 100%; aspect-ratio: 1;
+  object-fit: cover;
+}
+.no-image {
+  width: 100%; aspect-ratio: 1;
+  display: flex; align-items: center; justify-content: center;
+  background: #eee; color: var(--subtext); font-size: 0.8rem;
+}
+.item-info {
+  padding: 0.5rem;
+  display: flex; flex-direction: column; gap: 0.2rem;
+}
+.item-type { font-size: 0.85rem; font-weight: 600; }
+.item-warmth, .item-texture { font-size: 0.75rem; color: var(--subtext); }
+.category-title { font-size: 1.1rem; }
+.empty-msg { color: var(--subtext); font-size: 0.9rem; text-align: center; padding: 2rem; }
+
+/* ── 버튼 ────────────────────────────────────── */
+.btn {
+  display: inline-block;
+  padding: 0.6rem 1.4rem;
+  border-radius: 8px;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  text-decoration: none;
+}
+.btn:active { transform: scale(0.98); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-d); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-sm { padding: 0.3rem 0.8rem; font-size: 0.8rem; }
+.btn-full { width: 100%; text-align: center; margin-top: 1rem; }
+
+/* ── 알림 ────────────────────────────────────── */
+.alert {
+  padding: 1rem 1.2rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+.alert-info { background: #dbeafe; color: #1e40af; }
+.alert a { color: #1d4ed8; }
+
+/* ── 반응형 ──────────────────────────────────── */
+@media (max-width: 600px) {
+  .form-row { grid-template-columns: 1fr; }
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .weather-temps { gap: 0.5rem; }
+}

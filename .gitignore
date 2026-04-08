@@ -2,4 +2,36 @@ venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# 환경변수 (API 키 포함 — 절대 커밋 금지)
 .env
+*.env
+!.env.example
+
+# DB 파일
+*.db
+*.sqlite
+
+# 업로드 이미지 (용량 크므로 제외)
+static/uploads/*
+!static/uploads/.gitkeep
+
+# ML 모델 파일 (용량 큼 — Git LFS 사용 권장)
+*.pt
+*.pth
+*.onnx
+
+# 사용자 프로필 (개인정보)
+user_profile.json
+
+# Docker
+.dockerignore
+
+# 생성된 문서 / 유틸 스크립트
+make_pdf.py
+NotoSansKR.ttf
+*.pdf
+
+# Claude 메모리
+.claude/
+

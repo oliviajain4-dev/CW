@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}내 정보 설정{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>내 정보 설정</h1>
+  <p class="subtitle">정확한 스타일링을 위해 정보를 입력해주세요</p>
+</div>
+
+<div class="card form-card">
+  <form method="POST" action="{{ url_for('profile') }}">
+
+    <div class="form-section">
+      <h2>기본 정보</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>이름 (닉네임)</label>
+          <input type="text" name="name" value="{{ profile.get('name', '') }}" placeholder="이름을 입력해주세요">
+        </div>
+        <div class="form-group">
+          <label>성별</label>
+          <select name="gender">
+            <option value="여성" {% if profile.get('gender') == '여성' %}selected{% endif %}>여성</option>
+            <option value="남성" {% if profile.get('gender') == '남성' %}selected{% endif %}>남성</option>
+            <option value="미입력" {% if not profile.get('gender') or profile.get('gender') == '미입력' %}selected{% endif %}>선택 안함</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>키 (cm)</label>
+          <input type="number" name="height" value="{{ profile.get('height', '') }}" placeholder="예: 165" min="100" max="220">
+        </div>
+        <div class="form-group">
+          <label>몸무게 (kg)</label>
+          <input type="number" name="weight" value="{{ profile.get('weight', '') }}" placeholder="예: 55" min="30" max="200">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2>스타일 설정</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>체형</label>
+          <select name="body_type">
+            {% for bt in ['슬림', '보통', '근육형', '통통'] %}
+            <option value="{{ bt }}" {% if profile.get('body_type') == bt %}selected{% endif %}>{{ bt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>선호 스타일</label>
+          <select name="style_pref">
+            {% for sp in ['캐주얼', '스트릿', '포멀', '미니멀', '페미닌', '스포티'] %}
+            <option value="{{ sp }}" {% if profile.get('style_pref') == sp %}selected{% endif %}>{{ sp }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-section">
+      <h2>날씨 설정</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label>추위/더위 민감도</label>
+          <select name="sensitivity">
+            <option value="1" {% if profile.get('sensitivity') == '1' %}selected{% endif %}>1 — 추위를 많이 탐</option>
+            <option value="2" {% if profile.get('sensitivity') == '2' %}selected{% endif %}>2 — 약간 추위 탐</option>
+            <option value="3" {% if profile.get('sensitivity', '3') == '3' %}selected{% endif %}>3 — 보통</option>
+            <option value="4" {% if profile.get('sensitivity') == '4' %}selected{% endif %}>4 — 약간 더위 탐</option>
+            <option value="5" {% if profile.get('sensitivity') == '5' %}selected{% endif %}>5 — 더위를 많이 탐</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>주요 용도 (TPO)</label>
+          <select name="tpo">
+            {% for tpo in ['일상', '출근', '학교', '학원', '데이트', '운동', '야외활동', '특별한 날'] %}
+            <option value="{{ tpo }}" {% if profile.get('tpo') == tpo %}selected{% endif %}>{{ tpo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>위치 (기상청 X좌표)</label>
+          <input type="number" name="nx" value="{{ profile.get('nx', '62') }}" placeholder="62 (성남 기본값)">
+        </div>
+        <div class="form-group">
+          <label>위치 (기상청 Y좌표)</label>
+          <input type="number" name="ny" value="{{ profile.get('ny', '123') }}" placeholder="123 (성남 기본값)">
+        </div>
+      </div>
+      <p class="hint">기상청 격자 좌표: 서울(60,127) / 성남(62,123) / 부산(98,76) / 대구(89,90)</p>
+    </div>
+
+    <button type="submit" class="btn btn-primary btn-full">저장하기</button>
+  </form>
+</div>
+{% endblock %}

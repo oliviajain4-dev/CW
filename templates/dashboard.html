@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}오늘의 코디 — 내 옷장의 코디{% endblock %}
+
+{% block content %}
+
+<!-- 인사 헤더 -->
+<div class="page-header">
+  <h1>
+    {% if profile.get('name') %}
+      안녕하세요, {{ profile['name'] }}님 👋
+    {% else %}
+      오늘의 코디 추천
+    {% endif %}
+  </h1>
+  <p class="subtitle">{{ now.strftime('%Y년 %m월 %d일 %A') }} — {{ profile.get('tpo', '일상') }}</p>
+</div>
+
+<!-- 프로필 미설정 알림 -->
+{% if not profile %}
+<div class="alert alert-info">
+  <strong>내 정보가 없어요!</strong>
+  <a href="{{ url_for('profile') }}">여기서 키·몸무게·스타일 선호도를 설정</a>하면 더 정확한 추천을 받을 수 있어요.
+</div>
+{% endif %}
+
+<div class="dashboard-grid">
+
+  <!-- 날씨 카드 -->
+  <div class="card weather-card">
+    <h2>🌤 오늘 날씨</h2>
+    {% if weather %}
+    <div class="weather-temps">
+      <div class="temp-block">
+        <span class="temp-label">아침</span>
+        <span class="temp-value">{{ weather.morning.feels_like }}°C</span>
+      </div>
+      <div class="temp-block">
+        <span class="temp-label">낮</span>
+        <span class="temp-value">{{ weather.afternoon.feels_like }}°C</span>
+      </div>
+      <div class="temp-block">
+        <span class="temp-label">저녁</span>
+        <span class="temp-value">{{ weather.evening.feels_like }}°C</span>
+      </div>
+    </div>
+    {% if style_rec %}
+    <div class="weather-label">{{ style_rec.condition_label }}</div>
+    {% if layering and layering.layering_needed %}
+    <div class="layering-alert">
+      ⚠️ 일교차 {{ "%.0f"|format(layering.temp_diff) }}도 — 레이어링 추천
+    </div>
+    {% endif %}
+    {% if style_rec.humidity_note %}
+    <div class="humidity-note">💧 {{ style_rec.humidity_note }}</div>
+    {% endif %}
+    {% endif %}
+    {% else %}
+    <p class="empty-msg">날씨 데이터를 불러올 수 없어요. API 키를 확인해주세요.</p>
+    {% endif %}
+  </div>
+
+  <!-- 추천 아이템 카드 -->
+  {% if style_rec %}
+  <div class="card style-card">
+    <h2>✅ 오늘 추천 아이템</h2>
+    <ul class="item-list">
+      {% for item in style_rec.recommended_items %}
+      <li class="item-good">{{ item }}</li>
+      {% endfor %}
+    </ul>
+    <h3>❌ 피할 아이템</h3>
+    <ul class="item-list">
+      {% for item in style_rec.avoid_items %}
+      <li class="item-bad">{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- 헤어·신발·악세서리 카드 -->
+  <div class="card detail-card">
+    <h2>💇 헤어 · 신발 · 악세서리</h2>
+    <div class="detail-item">
+      <span class="detail-icon">💇</span>
+      <div>
+        <strong>헤어</strong>
+        <p>{{ style_rec.hair_rec }}</p>
+      </div>
+    </div>
+    <div class="detail-item">
+      <span class="detail-icon">👟</span>
+      <div>
+        <strong>신발</strong>
+        <p>{{ style_rec.shoe_rec }}</p>
+      </div>
+    </div>
+    <div class="detail-item">
+      <span class="detail-icon">👜</span>
+      <div>
+        <strong>악세서리</strong>
+        <p>{{ style_rec.acc_rec }}</p>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- 수석 디자이너 AI 코멘트 -->
+{% if ai_comment %}
+<div class="card designer-card">
+  <div class="designer-header">
+    <span class="designer-avatar">👨‍🎨</span>
+    <div>
+      <strong>수석 디자이너 코멘트</strong>
+      <span class="designer-badge">30년 경력</span>
+    </div>
+  </div>
+  <div class="designer-comment">
+    {{ ai_comment | replace('\n', '<br>') | safe }}
+  </div>
+</div>
+{% endif %}
+
+<!-- 챗봇 -->
+<div class="card chatbot-card">
+  <h2>💬 스타일 상담하기</h2>
+  <p class="subtitle">수석 디자이너에게 스타일 고민을 물어보세요</p>
+
+  <div class="chat-window" id="chatWindow">
+    <div class="chat-msg assistant">
+      안녕하세요! 30년 경력의 수석 디자이너예요.<br>
+      오늘 코디나 스타일에 대해 뭐든 물어봐요 😊
+    </div>
+  </div>
+
+  <div class="chat-input-row">
+    <input type="text" id="chatInput" placeholder="예: 오늘 데이트인데 뭐 입으면 좋을까요?" />
+    <button id="chatSend" class="btn btn-primary">전송</button>
+  </div>
+</div>
+
+<script>
+  // 챗봇 context (현재 날씨·추천 정보 전달)
+  const chatContext = {
+    {% if style_rec %}
+    weather_label: "{{ style_rec.condition_label }}",
+    recommended_items: "{{ style_rec.recommended_items | join(', ') }}",
+    {% endif %}
+    tpo: "{{ profile.get('tpo', '일상') }}"
+  };
+</script>
+{% endblock %}

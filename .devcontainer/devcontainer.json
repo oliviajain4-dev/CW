@@ -1,0 +1,58 @@
+{
+  "name": "내 옷장의 코디 — Dev Container",
+
+  // docker-compose.yml을 기반으로 Dev Container 구성
+  // VS Code가 'web' 서비스 컨테이너 안으로 들어감
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "web",
+  "workspaceFolder": "/app",
+
+  // ── VS Code 설정 ──────────────────────────────────
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",           // Python 언어 지원
+        "ms-python.pylance",          // 타입 추론 + 자동완성
+        "ms-python.debugpy",          // 디버거
+        "ms-azuretools.vscode-docker",// Docker 탐색기
+        "mtxr.sqltools",              // DB 쿼리 도구
+        "mtxr.sqltools-driver-pg",    // PostgreSQL 드라이버
+        "streetsidesoftware.code-spell-checker",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.formatting.provider": "black",
+        "editor.formatOnSave": true,
+        "editor.tabSize": 4,
+        "files.trimTrailingWhitespace": true,
+        // SQLTools DB 연결 (컨테이너 내부에서 바로 쿼리)
+        "sqltools.connections": [
+          {
+            "name": "codi_db (local docker)",
+            "driver": "PostgreSQL",
+            "server": "db",
+            "port": 5432,
+            "database": "codi",
+            "username": "codi_user",
+            "password": "codi_pass"
+          }
+        ]
+      }
+    }
+  },
+
+  // ── 컨테이너 기동 후 자동 실행 ───────────────────
+  "postCreateCommand": "pip install black pylance 2>/dev/null || true",
+
+  // ── 포트 포워딩 ───────────────────────────────────
+  // 컨테이너 포트 → 로컬 브라우저에서 접근 가능
+  "forwardPorts": [5000, 5432],
+  "portsAttributes": {
+    "5000": { "label": "Flask 웹 서버", "onAutoForward": "openBrowser" },
+    "5432": { "label": "PostgreSQL DB" }
+  },
+
+  // ── 환경변수 ──────────────────────────────────────
+  "runArgs": ["--env-file", "${localWorkspaceFolder}/.env"]
+}

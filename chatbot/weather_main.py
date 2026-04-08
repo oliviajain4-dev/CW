@@ -1,18 +1,20 @@
-from weather.weather_client import get_weather
-from weather.weather_style_mapper import get_style_recommendation, get_layering_recommendation
-from weather.llm_client import get_outfit_comment
+from chatbot.weather_client import get_weather
+from chatbot.weather_style_mapper import get_style_recommendation, get_layering_recommendation
+from chatbot.llm_client import get_outfit_comment
 
 
-def run(nx: int = 62, ny: int = 123, sensitivity: int = 3, tpo: str = "학원"):
+def run(nx: int = 62, ny: int = 123, sensitivity: int = 3,
+        tpo: str = "학원", user_profile: dict = None):
     """
-    nx, ny : 기상청 격자 좌표 (성남 기준 62, 123)
+    nx, ny      : 기상청 격자 좌표 (성남 기준 62, 123)
     sensitivity : 1=추위많이탐 / 3=보통 / 5=더위많이탐
-    tpo : 오늘 용도
+    tpo         : 오늘 용도
+    user_profile: {name, height, weight, body_type, style_pref, gender}
     """
     print("날씨 불러오는 중...")
     weather = get_weather(nx, ny)
 
-    print(f"아침 체감 {weather['morning']['feels_like']}°C / "
+    print(f"\n아침 체감 {weather['morning']['feels_like']}°C / "
           f"낮 체감 {weather['afternoon']['feels_like']}°C / "
           f"저녁 체감 {weather['evening']['feels_like']}°C")
     print(f"일교차 {weather['temp_range_diff']:.1f}도")
@@ -29,14 +31,18 @@ def run(nx: int = 62, ny: int = 123, sensitivity: int = 3, tpo: str = "학원"):
 
     print(f"\n날씨: {style_rec['condition_label']}")
     print(f"추천 아이템: {', '.join(style_rec['recommended_items'])}")
+    print(f"헤어: {style_rec['hair_rec']}")
+    print(f"신발: {style_rec['shoe_rec']}")
+    print(f"악세서리: {style_rec['acc_rec']}")
+
     if style_rec["humidity_note"]:
         print(f"습도: {style_rec['humidity_note']}")
     if layering["layering_needed"]:
         print(f"\n⚠️  {layering['layering_tip']}")
 
     print("\nAI 코멘트 생성 중...")
-    comment = get_outfit_comment(weather, style_rec, layering, tpo)
-    print(f"\n💬 오늘의 코디:\n{comment}")
+    comment = get_outfit_comment(weather, style_rec, layering, tpo, user_profile)
+    print(f"\n💬 수석 디자이너 코멘트:\n{comment}")
 
 
 if __name__ == "__main__":
