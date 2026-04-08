@@ -71,3 +71,6 @@ if __name__ == "__main__":
 
     for img_file in image_files:
         compare_preprocess(os.path.join(image_folder, img_file))
+
+
+        
