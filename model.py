@@ -124,6 +124,8 @@ def analyze_outfit(image_path, remove_bg=True):
     with torch.no_grad():
         image_features = model.encode_image(tensor)
 
+        # 각 카테고리별 최고 확률과 예측 수집
+        category_scores = {}
         for part, labels in [("상의", top_labels),
                               ("하의", bottom_labels),
                               ("아우터", outer_labels)]:
@@ -132,13 +134,34 @@ def analyze_outfit(image_path, remove_bg=True):
             probs = (image_features @ feats.T).softmax(dim=-1)
             pred  = labels[probs.argmax()]
             prob  = probs.max().item()
+            category_scores[part] = (pred, prob)
+
+        # ── 카테고리 결정 로직 ──────────────────────
+        outer_pred, outer_prob = category_scores["아우터"]
+        top_pred,   top_prob   = category_scores["상의"]
+        bottom_pred, bottom_prob = category_scores["하의"]
+
+        has_outer = (outer_pred != "no outer" and outer_prob > 0.5)
+
+        # 아우터가 감지됐으면 → 아우터 사진이므로 상의/하의는 저장 안 함
+        # 아우터가 없으면 → 상의/하의 중 확률 높은 것 하나만 저장
+        if has_outer:
+            best_main = None  # 아우터 사진 → 상의/하의 모두 없음
+        else:
+            best_main = "상의" if top_prob >= bottom_prob else "하의"
+
+        for part, labels in [("상의", top_labels), ("하의", bottom_labels), ("아우터", outer_labels)]:
+            pred, prob = category_scores[part]
 
             if part == "아우터":
-                item = pred if (pred != "no outer" and prob > 0.5) else "없음"
-            else:
+                item = pred if has_outer else "없음"
+            elif best_main is None:
+                item = "없음"   # 아우터 사진 → 상의/하의 없음
+            elif part == best_main:
                 item = pred
+            else:
+                item = "없음"
 
-            # 두께/질감 정보 추가
             info = THICKNESS_MAP.get(item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
             result[part] = {
                 "item":      item,

@@ -1,308 +1,1003 @@
-/* ── 기본 리셋 & 변수 ─────────────────────────── */
-:root {
-  --primary:   #6c63ff;
-  --primary-d: #574fd6;
-  --danger:    #e74c3c;
-  --bg:        #f4f4f8;
-  --card-bg:   #ffffff;
-  --text:      #2d2d2d;
-  --subtext:   #6b7280;
-  --border:    #e5e7eb;
-  --radius:    12px;
-  --shadow:    0 2px 12px rgba(0,0,0,0.08);
-}
+/* ═══════════════════════════════════════════
+   My Mini Co-di — 게임 UI 스타일
+   ═══════════════════════════════════════════ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
   font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh; width: 100vw;
+  user-select: none;
 }
 
-/* ── 네비게이션 ─────────────────────────────── */
-.navbar {
-  background: var(--card-bg);
-  box-shadow: var(--shadow);
-  padding: 0 2rem;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  z-index: 100;
+/* ── 방 배경 ─────────────────────────────────── */
+.room-scene {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  /* 벽지 (연한 라일락) → 바닥 (나무) */
+  background: linear-gradient(180deg,
+    #f0e4f4 0%,
+    #eedde8 56%,
+    #d4a870 56%,
+    #c09058 100%
+  );
 }
 
-.nav-logo {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--primary);
-  text-decoration: none;
+/* 벽지 패턴 — 작은 마름모 반복 */
+.room-scene::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 44% 0;
+  background-image:
+    radial-gradient(circle, rgba(220,180,210,0.35) 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
+  pointer-events: none;
 }
 
-.nav-links a {
-  margin-left: 1.5rem;
-  text-decoration: none;
-  color: var(--subtext);
-  font-size: 0.9rem;
-  transition: color 0.2s;
-}
-.nav-links a:hover { color: var(--primary); }
-
-/* ── 컨테이너 ────────────────────────────────── */
-.container {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+/* 바닥 나무 결 */
+.room-scene::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 44%;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0px, transparent 58px,
+    rgba(0,0,0,0.06) 58px, rgba(0,0,0,0.06) 60px
+  );
+  pointer-events: none;
 }
 
-/* ── 페이지 헤더 ─────────────────────────────── */
-.page-header { margin-bottom: 2rem; }
-.page-header h1 { font-size: 1.8rem; font-weight: 700; }
-.subtitle { color: var(--subtext); margin-top: 0.3rem; font-size: 0.95rem; }
-
-/* ── 카드 ────────────────────────────────────── */
-.card {
-  background: var(--card-bg);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+/* ── 창문 ─────────────────────────────────────── */
+.room-window {
+  position: absolute;
+  top: 7%; right: 13%;
+  width: 120px; height: 140px;
+  background: linear-gradient(160deg, #c8e8ff 0%, #e8f8ff 40%, #fff8e8 100%);
+  border: 10px solid #c8904a;
+  border-radius: 4px 4px 0 0;
+  box-shadow: inset 0 0 24px rgba(255,255,255,0.6), 3px 6px 16px rgba(0,0,0,0.12);
+}
+/* 창틀 십자 */
+.room-window::before {
+  content: '';
+  position: absolute;
+  top: 50%; left: 0; right: 0; height: 2px;
+  background: rgba(200,144,74,0.5);
+}
+.room-window::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 50%; width: 2px;
+  background: rgba(200,144,74,0.5);
+}
+/* 창문 커튼 봉 */
+.curtain-rod {
+  position: absolute;
+  top: 4%; right: 10%;
+  width: 156px; height: 6px;
+  background: linear-gradient(90deg, #a07040, #c09060, #a07040);
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+/* 커튼 왼쪽 */
+.curtain-l {
+  position: absolute;
+  top: 5%; right: 21.5%;
+  width: 28px; height: 170px;
+  background: linear-gradient(180deg, #f0709a 0%, #e05080 60%, #c84070 100%);
+  border-radius: 0 0 40% 40%;
+  box-shadow: inset -3px 0 8px rgba(0,0,0,0.1);
+}
+/* 커튼 오른쪽 */
+.curtain-r {
+  position: absolute;
+  top: 5%; right: 10.5%;
+  width: 28px; height: 170px;
+  background: linear-gradient(180deg, #f0709a 0%, #e05080 60%, #c84070 100%);
+  border-radius: 0 0 40% 40%;
+  box-shadow: inset 3px 0 8px rgba(0,0,0,0.1);
 }
 
-.card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
-.card h3 { font-size: 0.95rem; font-weight: 600; margin: 0.8rem 0 0.5rem; }
-
-/* ── 대시보드 그리드 ─────────────────────────── */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
+/* ── 책장 (왼쪽 벽) ──────────────────────────── */
+.room-shelf {
+  position: absolute;
+  top: 8%; left: 8%;
+  width: 100px; height: 90px;
+  background: linear-gradient(180deg, #c8904a, #b07838);
+  border-radius: 4px;
+  box-shadow: 3px 4px 10px rgba(0,0,0,0.2);
+  display: flex; flex-direction: column;
+  padding: 8px 6px; gap: 6px;
 }
-.dashboard-grid .card { margin-bottom: 0; }
-
-/* ── 날씨 카드 ──────────────────────────────── */
-.weather-temps {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+.shelf-row {
+  display: flex; gap: 3px; align-items: flex-end;
 }
-.temp-block {
-  flex: 1;
-  text-align: center;
-  background: var(--bg);
-  border-radius: 8px;
-  padding: 0.8rem;
-}
-.temp-label { display: block; font-size: 0.8rem; color: var(--subtext); }
-.temp-value { display: block; font-size: 1.5rem; font-weight: 700; color: var(--primary); }
-.weather-label {
-  font-size: 1rem; font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-.layering-alert {
-  background: #fff3cd; color: #856404;
-  border-radius: 6px; padding: 0.5rem 0.8rem;
-  font-size: 0.88rem; margin-top: 0.5rem;
-}
-.humidity-note {
-  color: var(--subtext); font-size: 0.88rem; margin-top: 0.4rem;
+.shelf-book {
+  border-radius: 2px 2px 0 0;
+  flex-shrink: 0;
 }
 
-/* ── 추천 아이템 ────────────────────────────── */
-.item-list { list-style: none; }
-.item-list li { padding: 0.35rem 0; font-size: 0.92rem; }
-.item-good::before { content: "✔ "; color: #22c55e; }
-.item-bad::before  { content: "✖ "; color: var(--danger); }
-
-/* ── 헤어/신발/악세서리 카드 ───────────────── */
-.detail-item {
-  display: flex;
-  gap: 0.8rem;
-  align-items: flex-start;
-  margin-bottom: 1rem;
+/* ── 침대 (오른쪽) ───────────────────────────── */
+.room-bed {
+  position: absolute;
+  right: 2%; bottom: 44%;
+  width: 180px;
 }
-.detail-icon { font-size: 1.4rem; flex-shrink: 0; }
-.detail-item strong { display: block; font-size: 0.9rem; margin-bottom: 0.2rem; }
-.detail-item p { font-size: 0.88rem; color: var(--subtext); }
-
-/* ── 수석 디자이너 카드 ─────────────────────── */
-.designer-card { border-left: 4px solid var(--primary); }
-.designer-header {
-  display: flex; align-items: center; gap: 0.8rem;
-  margin-bottom: 1rem;
+.bed-headboard {
+  width: 180px; height: 68px;
+  background: linear-gradient(180deg, #c87060 0%, #b06050 100%);
+  border-radius: 10px 10px 0 0;
+  border: 3px solid #a05040;
+  box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px;
 }
-.designer-avatar { font-size: 2rem; }
-.designer-badge {
-  display: inline-block;
-  background: var(--primary);
-  color: #fff;
-  font-size: 0.72rem;
-  padding: 0.1rem 0.5rem;
-  border-radius: 20px;
-  margin-left: 0.4rem;
+.bed-headboard-stud {
+  width: 10px; height: 10px;
+  background: #d08070;
+  border-radius: 50%;
+  border: 1px solid #a05040;
 }
-.designer-comment {
-  font-size: 0.97rem;
-  line-height: 1.8;
-  color: var(--text);
-  white-space: pre-wrap;
-}
-
-/* ── 챗봇 ────────────────────────────────────── */
-.chat-window {
-  background: var(--bg);
-  border-radius: 8px;
-  padding: 1rem;
-  height: 300px;
-  overflow-y: auto;
-  margin-bottom: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-}
-.chat-msg {
-  max-width: 80%;
-  padding: 0.7rem 1rem;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-.chat-msg.assistant {
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  align-self: flex-start;
-}
-.chat-msg.user {
-  background: var(--primary);
-  color: #fff;
-  align-self: flex-end;
-}
-.chat-input-row {
-  display: flex;
-  gap: 0.5rem;
-}
-.chat-input-row input {
-  flex: 1;
-  padding: 0.6rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  outline: none;
-}
-.chat-input-row input:focus { border-color: var(--primary); }
-
-/* ── 폼 ──────────────────────────────────────── */
-.form-card { max-width: 700px; margin: 0 auto; }
-.form-section { margin-bottom: 2rem; }
-.form-section h2 {
-  font-size: 1rem; font-weight: 700;
-  border-bottom: 2px solid var(--border);
-  padding-bottom: 0.5rem;
-  margin-bottom: 1rem;
-}
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.form-group { display: flex; flex-direction: column; }
-.form-group label { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.3rem; }
-.form-group input,
-.form-group select {
-  padding: 0.55rem 0.8rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  outline: none;
-  background: var(--card-bg);
-}
-.form-group input:focus,
-.form-group select:focus { border-color: var(--primary); }
-.hint { font-size: 0.78rem; color: var(--subtext); margin-top: 0.4rem; }
-
-/* ── 업로드 영역 ─────────────────────────────── */
-.upload-card { max-width: 600px; }
-.upload-area {
-  border: 2px dashed var(--border);
-  border-radius: 8px;
-  text-align: center;
-  padding: 2rem;
-  cursor: pointer;
-  margin-bottom: 1rem;
-  transition: border-color 0.2s;
+.bed-mattress {
+  width: 180px; height: 55px;
+  background: linear-gradient(180deg, #fff0ec 0%, #ffe8e0 100%);
+  border: 2px solid #e0c0b0;
+  border-top: none;
   position: relative;
 }
-.upload-area:hover { border-color: var(--primary); }
-.upload-area input[type="file"] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer;
-}
-.upload-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
-.preview-hidden { display: none; }
-#previewImg img { max-height: 200px; border-radius: 8px; margin-top: 1rem; }
-
-/* ── 옷장 그리드 ─────────────────────────────── */
-.wardrobe-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1rem;
-}
-.wardrobe-item {
-  border: 1px solid var(--border);
+.bed-pillow {
+  position: absolute;
+  top: 6px; left: 10px;
+  width: 70px; height: 35px;
+  background: linear-gradient(135deg, #fff8f6, #ffe0d8);
   border-radius: 8px;
-  overflow: hidden;
-  text-align: center;
-  background: var(--bg);
+  border: 1px solid #e8d0c8;
+  box-shadow: 1px 2px 4px rgba(0,0,0,0.08);
 }
-.wardrobe-item img {
-  width: 100%; aspect-ratio: 1;
-  object-fit: cover;
+.bed-pillow2 {
+  position: absolute;
+  top: 6px; right: 10px;
+  width: 70px; height: 35px;
+  background: linear-gradient(135deg, #f8f0ff, #eed8f8);
+  border-radius: 8px;
+  border: 1px solid #dcc8e8;
+  box-shadow: 1px 2px 4px rgba(0,0,0,0.08);
 }
-.no-image {
-  width: 100%; aspect-ratio: 1;
+.bed-blanket {
+  width: 180px; height: 20px;
+  background: linear-gradient(180deg, #f090b0, #e07090);
+  border: 1px solid #d06080;
+  border-top: 3px solid #ff9ab8;
+}
+
+/* ── 책상 (왼쪽 하단) ────────────────────────── */
+.room-desk {
+  position: absolute;
+  left: 4%; bottom: 44%;
+  width: 130px;
+}
+.desk-top {
+  width: 130px; height: 14px;
+  background: linear-gradient(180deg, #d4a060, #c09050);
+  border-radius: 4px 4px 0 0;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.1);
+}
+.desk-body {
+  width: 130px; height: 50px;
+  background: linear-gradient(180deg, #c09050, #a87840);
   display: flex; align-items: center; justify-content: center;
-  background: #eee; color: var(--subtext); font-size: 0.8rem;
+  gap: 8px;
 }
-.item-info {
-  padding: 0.5rem;
-  display: flex; flex-direction: column; gap: 0.2rem;
+.desk-monitor {
+  width: 44px; height: 36px;
+  background: #1a1a2e;
+  border-radius: 4px;
+  border: 2px solid #333;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
 }
-.item-type { font-size: 0.85rem; font-weight: 600; }
-.item-warmth, .item-texture { font-size: 0.75rem; color: var(--subtext); }
-.category-title { font-size: 1.1rem; }
-.empty-msg { color: var(--subtext); font-size: 0.9rem; text-align: center; padding: 2rem; }
+.desk-lamp {
+  font-size: 22px;
+  line-height: 1;
+}
+.desk-legs {
+  display: flex; justify-content: space-between; padding: 0 10px;
+}
+.desk-leg {
+  width: 8px; height: 20px;
+  background: #a87840;
+}
+
+/* ── 카펫 ────────────────────────────────────── */
+.room-rug {
+  position: absolute;
+  bottom: 46%; left: 50%; transform: translateX(-50%);
+  width: 260px; height: 90px;
+  background: radial-gradient(ellipse, rgba(220,160,200,0.55) 0%, rgba(200,130,170,0.3) 60%, transparent 80%);
+  border-radius: 50%;
+}
+
+/* ── 조명 효과 (천장) ────────────────────────── */
+.room-ceiling-light {
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 200px; height: 200px;
+  background: radial-gradient(ellipse, rgba(255,240,200,0.3) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ── 액자 ────────────────────────────────────── */
+.room-picture {
+  position: absolute;
+  top: 13%; left: 22%;
+  width: 64px; height: 56px;
+  background: linear-gradient(135deg, #ffe8f0, #ffd0e4);
+  border: 6px solid #c8904a;
+  border-radius: 3px;
+  box-shadow: 2px 4px 10px rgba(0,0,0,0.18);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px;
+}
+
+/* ── 상단 네비게이션 ─────────────────────────── */
+.game-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 48px;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  z-index: 300;
+  gap: 0;
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 800;
+  color: #e05080;
+  text-decoration: none;
+  margin-right: 24px;
+  white-space: nowrap;
+}
+.nav-logo span { font-size: 20px; }
+.nav-center { display: flex; gap: 4px; flex: 1; }
+.nav-center a {
+  padding: 5px 14px;
+  font-size: 13px; font-weight: 600;
+  color: #555;
+  text-decoration: none;
+  border-radius: 20px;
+  transition: all 0.15s;
+}
+.nav-center a:hover,
+.nav-center a.active { background: #ffe0ec; color: #e05080; }
+.nav-right {
+  display: flex; align-items: center; gap: 6px;
+}
+.nav-icon-btn {
+  width: 34px; height: 34px;
+  border: none; background: rgba(0,0,0,0.06);
+  border-radius: 50%; cursor: pointer;
+  font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.nav-icon-btn:hover { background: #ffe0ec; }
+
+/* ── 왼쪽 사이드바 ──────────────────────────── */
+.sidebar {
+  position: fixed;
+  left: 0; top: 48px; bottom: 32px;
+  width: 66px;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(0,0,0,0.07);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 4px;
+  z-index: 200;
+}
+.sidebar-avatar {
+  width: 46px; height: 46px;
+  background: linear-gradient(135deg, #ffe0ec, #ffc8dc);
+  border: 2px solid #f090b0;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.sidebar-divider {
+  width: 36px; height: 1px;
+  background: rgba(0,0,0,0.08);
+  margin: 4px 0;
+}
+.sidebar-btn {
+  width: 46px; height: 46px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+  position: relative;
+}
+.sidebar-btn:hover { background: #ffe0ec; }
+.sidebar-btn.active {
+  background: linear-gradient(135deg, #ff90b8, #e05080);
+  box-shadow: 0 3px 10px rgba(224,80,128,0.4);
+}
+.sidebar-btn .btn-label {
+  position: absolute;
+  left: 54px;
+  background: rgba(0,0,0,0.75);
+  color: #fff;
+  font-size: 10px; font-weight: 600;
+  padding: 3px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.15s;
+}
+.sidebar-btn:hover .btn-label { opacity: 1; }
+
+/* ── 캐릭터 영역 ─────────────────────────────── */
+.character-area {
+  position: fixed;
+  top: 48px; bottom: 32px; left: 66px; right: 0;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding-bottom: 46%;
+  pointer-events: none;
+  z-index: 10;
+}
+.character-figure {
+  display: flex; flex-direction: column; align-items: center;
+  animation: charFloat 3.5s ease-in-out infinite;
+}
+@keyframes charFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+/* CSS 캐릭터 */
+.char-head {
+  width: 52px; height: 56px;
+  background: linear-gradient(180deg, #fde8d0 0%, #f8d8c0 100%);
+  border-radius: 50% 50% 45% 45%;
+  position: relative;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+  border: 1px solid rgba(200,150,120,0.3);
+}
+/* 머리카락 */
+.char-head::before {
+  content: '';
+  position: absolute;
+  top: -14px; left: -6px; right: -6px;
+  height: 36px;
+  background: linear-gradient(180deg, #3a2010 0%, #5a3820 100%);
+  border-radius: 50% 50% 30% 30%;
+  z-index: 1;
+}
+/* 포니테일 */
+.char-head::after {
+  content: '';
+  position: absolute;
+  top: -6px; right: -14px;
+  width: 16px; height: 40px;
+  background: linear-gradient(180deg, #3a2010, #5a3820);
+  border-radius: 40% 60% 60% 40%;
+  transform: rotate(15deg);
+  z-index: 0;
+}
+/* 눈 */
+.char-eyes {
+  position: absolute;
+  top: 22px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 12px;
+}
+.char-eye {
+  width: 7px; height: 8px;
+  background: #2a1a0a;
+  border-radius: 50%;
+  position: relative;
+}
+.char-eye::after {
+  content: '';
+  position: absolute;
+  top: 1px; right: 1px;
+  width: 2px; height: 2px;
+  background: white;
+  border-radius: 50%;
+}
+/* 볼 터치 */
+.char-cheeks {
+  position: absolute;
+  top: 30px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 22px;
+}
+.char-cheek {
+  width: 10px; height: 6px;
+  background: rgba(255,150,150,0.45);
+  border-radius: 50%;
+}
+/* 입 */
+.char-mouth {
+  position: absolute;
+  top: 40px; left: 50%; transform: translateX(-50%);
+  width: 14px; height: 6px;
+  border-bottom: 2px solid #c08070;
+  border-radius: 0 0 50% 50%;
+}
+
+/* 몸통 상의 */
+.char-torso {
+  width: 54px; height: 56px;
+  background: linear-gradient(180deg, #f080a8 0%, #e06090 100%);
+  border-radius: 6px 6px 4px 4px;
+  margin-top: 2px;
+  position: relative;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}
+/* 칼라 */
+.char-torso::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 20px; height: 14px;
+  background: white;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  opacity: 0.7;
+}
+/* 팔 왼쪽 */
+.char-arm-l {
+  position: absolute;
+  top: 6px; left: -12px;
+  width: 14px; height: 42px;
+  background: linear-gradient(180deg, #f080a8, #fde8d0);
+  border-radius: 6px;
+  transform: rotate(-5deg);
+}
+/* 팔 오른쪽 */
+.char-arm-r {
+  position: absolute;
+  top: 6px; right: -12px;
+  width: 14px; height: 42px;
+  background: linear-gradient(180deg, #f080a8, #fde8d0);
+  border-radius: 6px;
+  transform: rotate(5deg);
+}
+
+/* 치마 */
+.char-skirt {
+  width: 68px; height: 46px;
+  background: linear-gradient(180deg, #9966cc 0%, #7744aa 100%);
+  border-radius: 4px 4px 30px 30px;
+  margin-top: -2px;
+  clip-path: polygon(8% 0%, 92% 0%, 100% 100%, 0% 100%);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+}
+
+/* 다리 */
+.char-legs {
+  display: flex; gap: 10px; margin-top: 1px;
+}
+.char-leg {
+  width: 16px; height: 36px;
+  background: linear-gradient(180deg, #fde8d0, #f8d8c0);
+  border-radius: 4px;
+}
+/* 신발 */
+.char-shoe {
+  width: 20px; height: 10px;
+  background: #3a2010;
+  border-radius: 40% 60% 60% 40%;
+  margin-top: -2px;
+}
+.char-shoes {
+  display: flex; gap: 6px;
+}
+
+/* 그림자 */
+.char-shadow {
+  width: 70px; height: 14px;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.18), transparent 70%);
+  border-radius: 50%;
+  margin-top: 4px;
+  animation: shadowPulse 3.5s ease-in-out infinite;
+}
+@keyframes shadowPulse {
+  0%, 100% { transform: scaleX(1);   opacity: 0.18; }
+  50%       { transform: scaleX(0.75); opacity: 0.1; }
+}
+
+/* 말풍선 */
+.char-bubble {
+  background: rgba(255,255,255,0.92);
+  border: 1px solid #f0c0d8;
+  border-radius: 12px 12px 12px 2px;
+  padding: 5px 10px;
+  font-size: 11px; font-weight: 600; color: #e05080;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  white-space: nowrap;
+  animation: bubblePop 3.5s ease-in-out infinite;
+}
+@keyframes bubblePop {
+  0%, 45%, 100% { opacity: 1; transform: scale(1); }
+  48%, 97%      { opacity: 0; transform: scale(0.8); }
+}
+
+/* ── 플로팅 패널 공통 ────────────────────────── */
+.panel {
+  position: fixed;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  z-index: 250;
+  display: none;
+  width: 280px;
+  min-width: 200px;
+  min-height: 120px;
+  overflow: hidden;
+  animation: panelIn 0.2s ease;
+  /* flex로 구성해서 body가 남은 높이 채움 */
+  flex-direction: column;
+}
+.panel.open { display: flex; }
+.panel.open { display: block; }
+@keyframes panelIn {
+  from { opacity: 0; transform: scale(0.92) translateY(-8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+  font-size: 14px; font-weight: 800;
+  color: #333;
+  cursor: grab;
+  user-select: none;
+}
+.panel-header:active { cursor: grabbing; }
+.panel-close {
+  width: 24px; height: 24px;
+  border: none; background: rgba(0,0,0,0.07);
+  border-radius: 50%; cursor: pointer;
+  font-size: 13px; color: #555;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.panel-close:hover { background: #ffd0e0; color: #e05080; }
+.panel-body { padding: 12px 14px; overflow-y: auto; flex: 1; min-height: 0; }
+
+/* ── 리사이즈 핸들 (8방향) ──────────────────── */
+.resize-handle {
+  position: absolute;
+  z-index: 10;
+  user-select: none;
+}
+/* 모서리 핸들 */
+.resize-handle[data-dir="se"] { bottom: 0; right: 0; width: 14px; height: 14px; cursor: se-resize; }
+.resize-handle[data-dir="sw"] { bottom: 0; left:  0; width: 14px; height: 14px; cursor: sw-resize; }
+.resize-handle[data-dir="ne"] { top: 0;    right: 0; width: 14px; height: 14px; cursor: ne-resize; }
+.resize-handle[data-dir="nw"] { top: 0;    left:  0; width: 14px; height: 14px; cursor: nw-resize; }
+/* 변 핸들 */
+.resize-handle[data-dir="n"]  { top: 0;    left: 14px; right: 14px; height: 5px; cursor: n-resize; }
+.resize-handle[data-dir="s"]  { bottom: 0; left: 14px; right: 14px; height: 5px; cursor: s-resize; }
+.resize-handle[data-dir="e"]  { right: 0;  top:  14px; bottom: 14px; width: 5px; cursor: e-resize; }
+.resize-handle[data-dir="w"]  { left:  0;  top:  14px; bottom: 14px; width: 5px; cursor: w-resize; }
+/* se 코너 시각 힌트 (구 ⤡ 역할) */
+.resize-handle[data-dir="se"]::after {
+  content: '⤡';
+  position: absolute; bottom: 1px; right: 2px;
+  font-size: 11px; color: #c0a8b8; line-height: 1;
+}
+/* 구 panel-resize 호환용 (혹시 남아있을 경우) */
+.panel-resize {
+  position: absolute;
+  bottom: 4px; right: 6px;
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: #ddd;
+  cursor: se-resize;
+  line-height: 1;
+  user-select: none;
+  transition: color 0.15s;
+  z-index: 10;
+}
+.panel-resize:hover { color: #e05080; }
+.panel-body::-webkit-scrollbar { width: 4px; }
+.panel-body::-webkit-scrollbar-thumb { background: #f0a0b8; border-radius: 4px; }
+
+/* 패널 위치 */
+#weatherPanel { top: 58px; left: 76px; width: 260px; }
+#stylePanel   { top: 58px; left: 76px; width: 280px; }
+#itemPanel    { top: 58px; left: 76px; width: 300px; }
+#designerPanel{ top: 58px; left: 76px; width: 300px; }
+#chatPanel    { bottom: 42px; right: 12px; width: 300px; }
+#profilePanel { top: 58px; right: 12px; width: 260px; }
+
+/* ── 날씨 패널 내용 ──────────────────────────── */
+.weather-temps {
+  display: flex; gap: 6px; margin-bottom: 10px;
+}
+.temp-block {
+  flex: 1; text-align: center;
+  background: linear-gradient(180deg, #fff0f5, #fff);
+  border: 1px solid #ffd0e8;
+  border-radius: 10px;
+  padding: 8px 4px;
+}
+.temp-label { display: block; font-size: 10px; color: #999; margin-bottom: 2px; }
+.temp-value { display: block; font-size: 20px; font-weight: 800; color: #e05080; }
+.weather-label { font-size: 12px; font-weight: 700; color: #7755aa; margin: 6px 0 4px; }
+.layering-alert {
+  background: #fffbe6; border: 1px solid #f9d030;
+  color: #856404; border-radius: 8px;
+  padding: 5px 9px; font-size: 11px; margin-top: 5px;
+}
+.humidity-note { color: #999; font-size: 11px; margin-top: 4px; }
+
+/* ── 추천/스타일 패널 ────────────────────────── */
+.item-list { list-style: none; }
+.item-list li {
+  padding: 4px 0; font-size: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+.item-list li:last-child { border: none; }
+.item-good::before { content: "✔ "; color: #22c55e; }
+.item-bad::before  { content: "✖ "; color: #e05080; }
+
+.detail-item {
+  display: flex; gap: 8px; align-items: flex-start;
+  margin-bottom: 8px; padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+.detail-item:last-child { border: none; margin: 0; padding: 0; }
+.detail-icon { font-size: 18px; flex-shrink: 0; }
+.detail-item strong { display: block; font-size: 11px; font-weight: 700; margin-bottom: 1px; }
+.detail-item p { font-size: 11px; color: #888; }
+
+/* ── 캐릭터 옷 오버레이 ──────────────────────── */
+.char-body-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.char-clothing-img {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: none;
+  z-index: 2;
+}
+.char-outer-img {
+  z-index: 3;
+  opacity: 0.88;
+}
+/* 원피스 오버레이 — 상의+하의 전체 커버 */
+.char-dress-img {
+  display: none;
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 68px; height: 104px;
+  object-fit: cover;
+  border-radius: 6px 6px 30px 30px;
+  z-index: 4;
+  pointer-events: none;
+}
+/* 착용 선택 강조 */
+.wardrobe-panel-item.worn {
+  border-color: #e05080;
+  box-shadow: 0 0 0 2px #e05080, 0 2px 8px rgba(224,80,128,0.3);
+}
+
+/* ── 옷장(Item) 패널 ─────────────────────────── */
+.wardrobe-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.wardrobe-panel-item {
+  aspect-ratio: 1;
+  background: rgba(255,240,248,0.8);
+  border: 1px solid #f0c0d8;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.wardrobe-panel-item:hover {
+  border-color: #e05080;
+  box-shadow: 0 2px 8px rgba(224,80,128,0.2);
+}
+.wardrobe-panel-item img { width: 100%; height: 100%; object-fit: cover; border-radius: 9px; }
+.wardrobe-panel-item .no-img { font-size: 28px; color: #ccc; }
+.category-sep {
+  font-size: 11px; font-weight: 700; color: #e05080;
+  margin: 8px 0 5px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid #ffd0e8;
+  display: flex; align-items: center; gap: 4px;
+}
+.empty-msg { color: #bbb; font-size: 12px; text-align: center; padding: 16px; }
+
+/* ── 디자이너 패널 ───────────────────────────── */
+.designer-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.designer-avatar {
+  width: 42px; height: 42px;
+  background: #ffe0ec;
+  border: 1px solid #f0c0d8;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.designer-badge {
+  background: linear-gradient(135deg, #e05080, #9966cc);
+  color: #fff; font-size: 9px; font-weight: 700;
+  padding: 2px 8px; border-radius: 10px; margin-left: 4px;
+}
+.designer-comment {
+  font-size: 12px; line-height: 1.75; color: #444;
+  max-height: 200px; overflow-y: auto;
+}
+.designer-comment::-webkit-scrollbar { width: 3px; }
+.designer-comment::-webkit-scrollbar-thumb { background: #f0a0b8; border-radius: 3px; }
+
+/* ── 챗봇 패널 ───────────────────────────────── */
+.chat-window {
+  background: #fdf5f9;
+  border: 1px solid #f0d0e8;
+  border-radius: 10px;
+  padding: 10px;
+  height: 200px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.chat-window::-webkit-scrollbar { width: 3px; }
+.chat-window::-webkit-scrollbar-thumb { background: #f0a0b8; border-radius: 3px; }
+.chat-msg {
+  max-width: 82%;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 12px; line-height: 1.55;
+}
+.chat-msg.assistant {
+  background: #fff; border: 1px solid #f0d0e8;
+  align-self: flex-start; color: #333;
+  border-radius: 4px 12px 12px 12px;
+}
+.chat-msg.user {
+  background: linear-gradient(135deg, #e05080, #9966cc);
+  color: #fff; align-self: flex-end;
+  border-radius: 12px 4px 12px 12px;
+}
+.chat-input-row { display: flex; gap: 6px; }
+.chat-input-row input {
+  flex: 1;
+  padding: 7px 12px;
+  border: 1px solid #f0c0d8;
+  border-radius: 20px;
+  font-size: 12px; outline: none;
+  background: #fff; color: #333;
+  font-family: inherit;
+}
+.chat-input-row input:focus { border-color: #e05080; }
+.chat-input-row input::placeholder { color: #ccc; }
+
+/* ── 프로필 패널 ─────────────────────────────── */
+.profile-info-row {
+  display: flex; justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  font-size: 12px;
+}
+.profile-info-row:last-child { border: none; }
+.profile-info-row span:first-child { color: #999; }
+.profile-info-row span:last-child { font-weight: 600; color: #333; }
+.profile-edit-btn {
+  display: block; width: 100%;
+  margin-top: 10px; padding: 8px;
+  background: linear-gradient(135deg, #e05080, #9966cc);
+  color: #fff; border: none; border-radius: 10px;
+  font-size: 12px; font-weight: 700; font-family: inherit;
+  cursor: pointer; text-align: center; text-decoration: none;
+}
 
 /* ── 버튼 ────────────────────────────────────── */
 .btn {
   display: inline-block;
-  padding: 0.6rem 1.4rem;
-  border-radius: 8px;
-  border: none;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
-  text-decoration: none;
+  padding: 7px 18px;
+  border-radius: 20px; border: none;
+  font-size: 12px; font-weight: 700; font-family: inherit;
+  cursor: pointer; text-decoration: none; transition: all 0.15s;
 }
-.btn:active { transform: scale(0.98); }
-.btn-primary { background: var(--primary); color: #fff; }
-.btn-primary:hover { background: var(--primary-d); }
-.btn-danger { background: var(--danger); color: #fff; }
-.btn-sm { padding: 0.3rem 0.8rem; font-size: 0.8rem; }
-.btn-full { width: 100%; text-align: center; margin-top: 1rem; }
+.btn-primary {
+  background: linear-gradient(135deg, #e05080, #9966cc);
+  color: #fff; box-shadow: 0 3px 10px rgba(224,80,128,0.35);
+}
+.btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+.btn-danger { background: #e04040; color: #fff; }
+.btn-danger:hover { opacity: 0.85; }
+.btn-sm { padding: 3px 10px; font-size: 11px; }
+.btn-full { width: 100%; text-align: center; display: block; margin-top: 8px; }
 
 /* ── 알림 ────────────────────────────────────── */
 .alert {
-  padding: 1rem 1.2rem;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-  font-size: 0.9rem;
+  position: fixed; top: 58px; left: 50%; transform: translateX(-50%);
+  background: rgba(255,255,255,0.95); backdrop-filter: blur(8px);
+  border: 1px solid #f0c0d8; border-radius: 12px;
+  padding: 10px 16px; font-size: 12px; color: #333;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 400; max-width: 360px; text-align: center;
 }
-.alert-info { background: #dbeafe; color: #1e40af; }
-.alert a { color: #1d4ed8; }
+.alert a { color: #e05080; }
+.alert-error { border-color: #f0a0a0; color: #cc3333; }
+
+/* ── 하단 바 ─────────────────────────────────── */
+.bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 32px;
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgba(0,0,0,0.07);
+  display: flex; align-items: center; justify-content: center;
+  gap: 24px; z-index: 300;
+}
+.bottom-bar a {
+  font-size: 11px; color: #999; text-decoration: none; font-weight: 600;
+}
+.bottom-bar a:hover { color: #e05080; }
+
+/* ── 폼 (profile 페이지용) ─────────────────────── */
+.form-overlay {
+  position: fixed;
+  inset: 48px 0 32px 66px;
+  display: flex; align-items: flex-start; justify-content: center;
+  overflow-y: auto;
+  padding: 20px;
+  z-index: 100;
+}
+.form-card {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid #f0c0d8;
+  border-radius: 18px;
+  padding: 24px;
+  width: 100%; max-width: 560px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+}
+.form-card h1 { font-size: 18px; font-weight: 800; color: #e05080; margin-bottom: 20px; }
+.form-section { margin-bottom: 18px; }
+.form-section h2 {
+  font-size: 12px; font-weight: 700; color: #9966cc;
+  border-bottom: 1px solid #f0d0e8;
+  padding-bottom: 5px; margin-bottom: 12px;
+}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-group { display: flex; flex-direction: column; }
+.form-group label { font-size: 11px; font-weight: 600; color: #999; margin-bottom: 4px; }
+.form-group input,
+.form-group select {
+  padding: 7px 10px;
+  border: 1px solid #f0c0d8; border-radius: 10px;
+  font-size: 12px; font-family: inherit;
+  color: #333; background: #fff; outline: none;
+}
+.form-group input:focus,
+.form-group select:focus { border-color: #e05080; }
+.hint { font-size: 10px; color: #bbb; margin-top: 2px; }
+
+/* ── 옷장 업로드 (wardrobe 페이지용) ───────────── */
+.wardrobe-overlay {
+  position: fixed;
+  inset: 48px 0 32px 66px;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 20px;
+  z-index: 100;
+}
+.wardrobe-upload-card {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid #f0c0d8;
+  border-radius: 18px;
+  padding: 20px;
+  width: 100%; max-width: 680px;
+  margin-bottom: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+.wardrobe-upload-card h1 { font-size: 18px; font-weight: 800; color: #e05080; margin-bottom: 4px; }
+.wardrobe-upload-card .subtitle { font-size: 12px; color: #bbb; margin-bottom: 16px; }
+.upload-area {
+  border: 2px dashed #f0a8c8;
+  border-radius: 12px; text-align: center;
+  padding: 24px; cursor: pointer; margin-bottom: 10px;
+  background: #fff5fa; transition: all 0.2s; position: relative;
+}
+.upload-area:hover { border-color: #e05080; background: #ffe0ec; }
+.upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.upload-icon { font-size: 36px; margin-bottom: 6px; }
+.upload-area div { color: #bbb; font-size: 12px; }
+.preview-hidden { display: none; }
+#previewImg img { max-height: 160px; border-radius: 10px; margin-top: 10px; border: 1px solid #f0c0d8; }
+
+/* ── 드래그&드롭 ──────────────────────────────── */
+.wardrobe-item[draggable="true"] { cursor: grab; }
+.wardrobe-item[draggable="true"]:active { cursor: grabbing; }
+
+.drop-zone { transition: border-color 0.2s, background 0.2s; }
+.drop-zone.drag-over {
+  border-color: #e05080 !important;
+  background: rgba(224,80,128,0.07) !important;
+  box-shadow: 0 0 0 2px rgba(224,80,128,0.25), 0 8px 32px rgba(0,0,0,0.1);
+}
+.drop-hint {
+  font-size: 10px; font-weight: 400;
+  color: #dbb; margin-left: auto;
+  opacity: 0; transition: opacity 0.2s;
+}
+.drag-over .drop-hint { opacity: 1; color: #e05080; }
+
+.wardrobe-full-card {
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(16px);
+  border: 1px solid #f0c0d8;
+  border-radius: 18px;
+  padding: 20px;
+  width: 100%; max-width: 680px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  margin-bottom: 16px;
+}
+.wardrobe-full-card h2 {
+  font-size: 14px; font-weight: 800;
+  color: #e05080; margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.wardrobe-full-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+}
+.wardrobe-item {
+  border: 1px solid #f0c0d8; border-radius: 12px;
+  overflow: hidden; text-align: center; background: #fff5fa;
+  transition: all 0.2s;
+}
+.wardrobe-item:hover { border-color: #e05080; box-shadow: 0 4px 12px rgba(224,80,128,0.18); transform: translateY(-2px); }
+.wardrobe-item img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.no-image { width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #ffe8f4; color: #ddd; font-size: 24px; }
+.item-info { padding: 5px 4px; display: flex; flex-direction: column; gap: 1px; }
+.item-type { font-size: 10px; font-weight: 700; color: #333; }
+.item-warmth, .item-texture { font-size: 9px; color: #bbb; }
 
 /* ── 반응형 ──────────────────────────────────── */
 @media (max-width: 600px) {
-  .form-row { grid-template-columns: 1fr; }
-  .dashboard-grid { grid-template-columns: 1fr; }
-  .weather-temps { gap: 0.5rem; }
+  .sidebar { width: 52px; }
+  .character-area { left: 52px; }
+  .panel { max-width: calc(100vw - 64px); }
+  #chatPanel { right: 6px; bottom: 38px; }
+  .form-overlay, .wardrobe-overlay { left: 52px; }
 }

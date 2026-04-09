@@ -115,10 +115,22 @@ def get_chatbot_response(user_message: str, context: dict = None) -> str:
 
     context_info = ""
     if context:
+        wardrobe_info = ""
+        wardrobe = context.get('wardrobe', [])
+        if wardrobe:
+            lines = []
+            for item in wardrobe:
+                lines.append(f"  - {item.get('category','')}: {item.get('item_type','')} (보온도 {item.get('warmth',0)}점, 소재 {item.get('texture','')})")
+            wardrobe_info = "\n【내 옷장 보유 아이템】\n" + "\n".join(lines)
+
         context_info = f"""
 【현재 날씨·코디 컨텍스트】
 날씨: {context.get('weather_label', '')}
 추천 아이템: {context.get('recommended_items', '')}
+TPO: {context.get('tpo', '일상')}
+{wardrobe_info}
+
+위 옷장 아이템을 기반으로 실제 보유한 옷을 활용한 구체적인 코디를 추천해줘.
 """
 
     messages = [{"role": "user", "content": f"{context_info}\n{user_message}"}]
