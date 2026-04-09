@@ -1,65 +1,135 @@
 {% extends "base.html" %}
-{% block title %}내 옷장{% endblock %}
+{% block title %}My Wardrobe — My Mini Co-di{% endblock %}
+
+{% block sidebar %}
+  <button class="sidebar-btn active">
+    👗<span class="btn-label">내 옷장</span>
+  </button>
+  <button class="sidebar-btn" onclick="location.href='{{ url_for('dashboard') }}'">
+    🏠<span class="btn-label">홈으로</span>
+  </button>
+{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1>내 옷장</h1>
-  <p class="subtitle">옷 사진을 등록하면 AI가 자동으로 분석해요</p>
-</div>
+<div class="wardrobe-overlay">
 
-<!-- 업로드 폼 -->
-<div class="card upload-card">
-  <h2>옷 추가하기</h2>
-  <form method="POST" action="{{ url_for('wardrobe_add') }}" enctype="multipart/form-data">
-    <div class="upload-area" id="uploadArea">
-      <input type="file" name="image" id="imageInput" accept=".jpg,.jpeg,.png" required>
-      <label for="imageInput">
+  <!-- 업로드 카드 -->
+  <div class="wardrobe-upload-card">
+    <h1>👗 My Wardrobe</h1>
+    <p class="subtitle">옷 사진을 등록하면 AI가 분석해요 · 카드를 드래그해서 카테고리를 바꿀 수 있어요</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }}" style="position:static;transform:none;margin-bottom:12px;">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('wardrobe_add') }}" enctype="multipart/form-data">
+      <div class="upload-area" id="uploadArea">
+        <input type="file" name="image" id="imageInput" accept=".jpg,.jpeg,.png" multiple required>
         <div class="upload-icon">📷</div>
         <div>사진을 클릭하거나 드래그해서 올려주세요</div>
-        <div class="hint">JPG, PNG 지원</div>
-      </label>
-      <div id="previewImg" class="preview-hidden"></div>
-    </div>
-    <button type="submit" class="btn btn-primary">분석 & 등록</button>
-  </form>
-</div>
-
-<!-- 카테고리별 옷장 -->
-{% for cat_name, items in categories.items() %}
-<div class="card">
-  <h2 class="category-title">
-    {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% else %}🧥{% endif %}
-    {{ cat_name }} ({{ items|length }}개)
-  </h2>
-
-  {% if items %}
-  <div class="wardrobe-grid">
-    {% for item in items %}
-    <div class="wardrobe-item">
-      {% if item['image_path'] %}
-      <img src="{{ url_for('static', filename=item['image_path'].replace('static/', '')) }}"
-           alt="{{ item['item_type'] }}"
-           onerror="this.src='{{ url_for('static', filename='img/no-image.png') }}'">
-      {% else %}
-      <div class="no-image">이미지 없음</div>
-      {% endif %}
-      <div class="item-info">
-        <span class="item-type">{{ item['item_type'] }}</span>
-        <span class="item-warmth">보온도 {{ item['warmth'] }}점</span>
-        {% if item['texture'] %}
-        <span class="item-texture">{{ item['texture'] }}</span>
-        {% endif %}
+        <div style="font-size:10px;margin-top:4px;">JPG, PNG 지원 · 여러 장 동시 등록 가능</div>
+        <div id="previewImg" class="preview-hidden"></div>
       </div>
-      <form method="POST" action="{{ url_for('wardrobe_delete', item_id=item['id']) }}"
-            onsubmit="return confirm('삭제할까요?')">
-        <button type="submit" class="btn btn-danger btn-sm">삭제</button>
-      </form>
-    </div>
-    {% endfor %}
+      <button type="submit" class="btn btn-primary btn-full">✨ 분석 &amp; 등록</button>
+    </form>
   </div>
-  {% else %}
-  <p class="empty-msg">아직 {{ cat_name }} 아이템이 없어요. 위에서 추가해주세요!</p>
-  {% endif %}
+
+  <!-- 카테고리별 옷장 (드롭존) -->
+  {% for cat_name, items in categories.items() %}
+  <div class="wardrobe-full-card drop-zone"
+       data-category="{{ cat_name }}"
+       ondragover="onDragOver(event)"
+       ondragleave="onDragLeave(event)"
+       ondrop="onDrop(event, '{{ cat_name }}')">
+
+    <h2>
+      {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% elif cat_name == '원피스' %}👗{% else %}🧥{% endif %}
+      {{ cat_name }}
+      <span style="font-size:12px;color:#bbb;font-weight:400;">({{ items|length }}개)</span>
+      <span class="drop-hint">← 여기로 드래그</span>
+    </h2>
+
+    {% if items %}
+    <div class="wardrobe-full-grid" id="grid-{{ cat_name }}">
+      {% for item in items %}
+      <div class="wardrobe-item"
+           draggable="true"
+           data-id="{{ item['id'] }}"
+           data-category="{{ item['category'] }}"
+           ondragstart="onDragStart(event, {{ item['id'] }}, '{{ item['category'] }}')">
+        {% if item['image_path'] %}
+        <img src="{{ url_for('static', filename=item['image_path'].replace('static/', '')) }}"
+             alt="{{ item['item_type'] }}"
+             onerror="this.src='data:image/svg+xml,<svg/>'">
+        {% else %}
+        <div class="no-image">👚</div>
+        {% endif %}
+        <div class="item-info">
+          <span class="item-type">{{ item['item_type'] }}</span>
+        </div>
+        <div style="padding:0 5px 6px;">
+          <form method="POST" action="{{ url_for('wardrobe_delete', item_id=item['id']) }}"
+                onsubmit="return confirm('삭제할까요?')">
+            <button type="submit" class="btn btn-danger btn-sm btn-full">삭제</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="wardrobe-full-grid drop-empty" id="grid-{{ cat_name }}">
+      <p class="empty-msg" style="grid-column:1/-1;">아직 {{ cat_name }} 아이템이 없어요<br>여기로 드래그해서 옮겨요</p>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
 </div>
-{% endfor %}
+
+<script>
+let dragId = null;
+let dragFromCat = null;
+
+function onDragStart(e, id, fromCat) {
+  dragId = id;
+  dragFromCat = fromCat;
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+  setTimeout(() => { e.currentTarget.style.opacity = ''; }, 0);
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+
+function onDragLeave(e) {
+  // 자식 요소로 이동 시 leave 이벤트 무시
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-over');
+  }
+}
+
+function onDrop(e, toCat) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!dragId || toCat === dragFromCat) return;
+
+  fetch(`/wardrobe/move/${dragId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: toCat })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) location.reload();
+  })
+  .catch(() => alert('이동 중 오류가 발생했어요.'));
+}
+</script>
 {% endblock %}

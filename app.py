@@ -13,7 +13,7 @@ app.py — 내 옷장의 코디 Flask 웹 대시보드
   GET  /api/recommend       → 코디 추천 JSON
 """
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 import os
 import json
 from datetime import datetime
@@ -227,7 +227,7 @@ def wardrobe():
             conn,
             "SELECT * FROM wardrobe_items ORDER BY category, created_at DESC"
         )
-    categories = {"상의": [], "하의": [], "아우터": []}
+    categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
     for item in items:
         cat = item["category"]
         if cat in categories:
@@ -240,46 +240,69 @@ def wardrobe_add():
     if "image" not in request.files:
         return redirect(url_for("wardrobe"))
 
-    file = request.files["image"]
-    if file.filename == "" or not allowed_file(file.filename):
+    files = [f for f in request.files.getlist("image")
+             if f.filename != "" and allowed_file(f.filename)]
+    if not files:
         return redirect(url_for("wardrobe"))
 
-    filename  = secure_filename(file.filename)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
-    filename  = timestamp + filename
-    save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    file.save(save_path)
+    profile = load_profile()
+    user_id = profile.get("id")
+    errors  = []
 
-    try:
-        from model import analyze_outfit
-        result = analyze_outfit(save_path)
+    for file in files:
+        filename  = secure_filename(file.filename)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
+        filename  = timestamp + filename
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        file.save(save_path)
 
-        profile = load_profile()
-        user_id = profile.get("id")
+        try:
+            from model import analyze_outfit
+            result = analyze_outfit(save_path)
 
-        with get_db() as conn:
-            for category in ["상의", "하의", "아우터"]:
-                info = result[category]
-                if info["item"] == "없음":
-                    continue
-                if is_postgres():
-                    execute(conn, """
-                        INSERT INTO wardrobe_items
-                            (user_id, image_path, category, item_type, warmth, texture, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    """, (user_id, save_path, category, info["item"],
-                          info["warmth"], info["texture"]))
-                else:
-                    execute(conn, """
-                        INSERT INTO wardrobe_items
-                            (user_id, image_path, category, item_type, warmth, texture, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (user_id, save_path, category, info["item"],
-                          info["warmth"], info["texture"], datetime.now().isoformat()))
-    except Exception as e:
-        print(f"이미지 분석 오류: {e}")
+            with get_db() as conn:
+                for category in ["상의", "하의", "아우터"]:
+                    info = result[category]
+                    if info["item"] == "없음":
+                        continue
+                    # dress는 하의가 아닌 원피스로 저장
+                    save_category = "원피스" if info["item"] == "dress" else category
+                    if is_postgres():
+                        execute(conn, """
+                            INSERT INTO wardrobe_items
+                                (user_id, image_path, category, item_type, warmth, texture, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        """, (user_id, save_path, save_category, info["item"],
+                              info["warmth"], info["texture"]))
+                    else:
+                        execute(conn, """
+                            INSERT INTO wardrobe_items
+                                (user_id, image_path, category, item_type, warmth, texture, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (user_id, save_path, save_category, info["item"],
+                              info["warmth"], info["texture"], datetime.now().isoformat()))
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            errors.append(f"{file.filename}: {e}")
+
+    if errors:
+        flash("일부 이미지 분석 오류: " + " / ".join(errors), "error")
 
     return redirect(url_for("wardrobe"))
+
+
+@app.route("/wardrobe/move/<int:item_id>", methods=["POST"])
+def wardrobe_move(item_id):
+    """옷 카테고리 변경 (드래그&드롭)"""
+    data = request.get_json()
+    new_category = data.get("category")
+    if new_category not in ["상의", "하의", "원피스", "아우터"]:
+        return jsonify({"error": "invalid category"}), 400
+    ph = "%s" if is_postgres() else "?"
+    with get_db() as conn:
+        execute(conn, f"UPDATE wardrobe_items SET category={ph} WHERE id={ph}", (new_category, item_id))
+    return jsonify({"ok": True})
 
 
 @app.route("/wardrobe/delete/<int:item_id>", methods=["POST"])
@@ -289,9 +312,13 @@ def wardrobe_delete(item_id):
         row = fetchone(conn, f"SELECT image_path FROM wardrobe_items WHERE id={ph}", (item_id,))
         if row:
             img_path = row.get("image_path", "")
-            if img_path and os.path.exists(img_path) and "uploads" in img_path:
-                os.remove(img_path)
-        execute(conn, f"DELETE FROM wardrobe_items WHERE id={ph}", (item_id,))
+            # 같은 image_path로 등록된 모든 행 한 번에 삭제
+            if img_path:
+                execute(conn, f"DELETE FROM wardrobe_items WHERE image_path={ph}", (img_path,))
+                if os.path.exists(img_path) and "uploads" in img_path:
+                    os.remove(img_path)
+            else:
+                execute(conn, f"DELETE FROM wardrobe_items WHERE id={ph}", (item_id,))
     return redirect(url_for("wardrobe"))
 
 
@@ -373,4 +400,5 @@ def api_recommend():
 if __name__ == "__main__":
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     init_db()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    # Docker 환경에서 reloader=False: reloader가 두 번째 프로세스 spawn하여 주소창 두 개 뜨는 문제 방지
+    app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)

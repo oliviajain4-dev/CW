@@ -1,152 +1,287 @@
 {% extends "base.html" %}
-{% block title %}오늘의 코디 — 내 옷장의 코디{% endblock %}
+{% block title %}Home — My Mini Co-di{% endblock %}
+
+{% block sidebar %}
+  <button class="sidebar-btn" onclick="togglePanel('weatherPanel')" id="btn-weather">
+    🌤<span class="btn-label">날씨</span>
+  </button>
+  <button class="sidebar-btn" onclick="togglePanel('stylePanel')" id="btn-style">
+    ✨<span class="btn-label">오늘 추천</span>
+  </button>
+  <button class="sidebar-btn" onclick="togglePanel('itemPanel')" id="btn-item">
+    👗<span class="btn-label">내 옷장</span>
+  </button>
+  <button class="sidebar-btn" onclick="togglePanel('designerPanel')" id="btn-designer">
+    👨‍🎨<span class="btn-label">디자이너</span>
+  </button>
+  <div class="sidebar-divider"></div>
+  <button class="sidebar-btn" onclick="togglePanel('chatPanel')" id="btn-chat">
+    💬<span class="btn-label">스타일 상담</span>
+  </button>
+  <button class="sidebar-btn" onclick="togglePanel('profilePanel')" id="btn-profile">
+    👤<span class="btn-label">내 정보</span>
+  </button>
+{% endblock %}
 
 {% block content %}
 
-<!-- 인사 헤더 -->
-<div class="page-header">
-  <h1>
-    {% if profile.get('name') %}
-      안녕하세요, {{ profile['name'] }}님 👋
-    {% else %}
-      오늘의 코디 추천
-    {% endif %}
-  </h1>
-  <p class="subtitle">{{ now.strftime('%Y년 %m월 %d일 %A') }} — {{ profile.get('tpo', '일상') }}</p>
+<!-- 중앙 캐릭터 -->
+<div class="character-area">
+  <div class="character-figure">
+    <div class="char-bubble">
+      {% if profile.get('name') %}{{ profile['name'] }}님, 오늘도 예쁘게!{% else %}오늘 코디 골라볼까요?{% endif %}
+    </div>
+    <div class="char-head">
+      <div class="char-eyes">
+        <div class="char-eye"></div>
+        <div class="char-eye"></div>
+      </div>
+      <div class="char-cheeks">
+        <div class="char-cheek"></div>
+        <div class="char-cheek"></div>
+      </div>
+      <div class="char-mouth"></div>
+    </div>
+    <!-- 원피스는 상의+하의 동시 커버하는 래퍼 필요 -->
+    <div class="char-body-wrap">
+      <div class="char-torso" id="charTorso">
+        <div class="char-arm-l"></div>
+        <div class="char-arm-r"></div>
+        <img id="charTopImg" class="char-clothing-img" src="" alt="">
+        <img id="charOuterImg" class="char-clothing-img char-outer-img" src="" alt="">
+      </div>
+      <div class="char-skirt" id="charSkirt">
+        <img id="charBottomImg" class="char-clothing-img" src="" alt="">
+      </div>
+      <!-- 원피스 오버레이 (상의+하의 전체 커버) -->
+      <img id="charDressImg" class="char-dress-img" src="" alt="">
+    </div>
+    <div class="char-legs">
+      <div class="char-leg"></div>
+      <div class="char-leg"></div>
+    </div>
+    <div class="char-shoes">
+      <div class="char-shoe"></div>
+      <div class="char-shoe"></div>
+    </div>
+    <div class="char-shadow"></div>
+  </div>
 </div>
 
-<!-- 프로필 미설정 알림 -->
 {% if not profile %}
-<div class="alert alert-info">
+<div class="alert">
   <strong>내 정보가 없어요!</strong>
-  <a href="{{ url_for('profile') }}">여기서 키·몸무게·스타일 선호도를 설정</a>하면 더 정확한 추천을 받을 수 있어요.
+  <a href="{{ url_for('profile') }}">여기서 설정</a>하면 더 정확한 추천을 받을 수 있어요.
 </div>
 {% endif %}
 
-<div class="dashboard-grid">
-
-  <!-- 날씨 카드 -->
-  <div class="card weather-card">
-    <h2>🌤 오늘 날씨</h2>
+<!-- ① 날씨 패널 -->
+<div class="panel" id="weatherPanel">
+  <div class="panel-header">🌤 오늘 날씨
+    <button class="panel-close" onclick="closePanel('weatherPanel')">✕</button>
+  </div>
+  <div class="panel-body">
     {% if weather %}
     <div class="weather-temps">
-      <div class="temp-block">
-        <span class="temp-label">아침</span>
-        <span class="temp-value">{{ weather.morning.feels_like }}°C</span>
-      </div>
-      <div class="temp-block">
-        <span class="temp-label">낮</span>
-        <span class="temp-value">{{ weather.afternoon.feels_like }}°C</span>
-      </div>
-      <div class="temp-block">
-        <span class="temp-label">저녁</span>
-        <span class="temp-value">{{ weather.evening.feels_like }}°C</span>
-      </div>
+      <div class="temp-block"><span class="temp-label">아침</span><span class="temp-value">{{ weather.morning.feels_like }}°</span></div>
+      <div class="temp-block"><span class="temp-label">낮</span><span class="temp-value">{{ weather.afternoon.feels_like }}°</span></div>
+      <div class="temp-block"><span class="temp-label">저녁</span><span class="temp-value">{{ weather.evening.feels_like }}°</span></div>
     </div>
     {% if style_rec %}
     <div class="weather-label">{{ style_rec.condition_label }}</div>
     {% if layering and layering.layering_needed %}
-    <div class="layering-alert">
-      ⚠️ 일교차 {{ "%.0f"|format(layering.temp_diff) }}도 — 레이어링 추천
-    </div>
+    <div class="layering-alert">⚠️ 일교차 {{ "%.0f"|format(layering.temp_diff) }}도 — 레이어링 추천</div>
     {% endif %}
-    {% if style_rec.humidity_note %}
-    <div class="humidity-note">💧 {{ style_rec.humidity_note }}</div>
-    {% endif %}
+    {% if style_rec.humidity_note %}<div class="humidity-note">💧 {{ style_rec.humidity_note }}</div>{% endif %}
     {% endif %}
     {% else %}
-    <p class="empty-msg">날씨 데이터를 불러올 수 없어요. API 키를 확인해주세요.</p>
+    <p class="empty-msg">날씨 데이터를 불러올 수 없어요.</p>
     {% endif %}
   </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
+</div>
 
-  <!-- 추천 아이템 카드 -->
-  {% if style_rec %}
-  <div class="card style-card">
-    <h2>✅ 오늘 추천 아이템</h2>
-    <ul class="item-list">
-      {% for item in style_rec.recommended_items %}
-      <li class="item-good">{{ item }}</li>
-      {% endfor %}
+<!-- ② 오늘 추천 패널 -->
+<div class="panel" id="stylePanel">
+  <div class="panel-header">✨ 오늘 추천 코디
+    <button class="panel-close" onclick="closePanel('stylePanel')">✕</button>
+  </div>
+  <div class="panel-body">
+    {% if style_rec %}
+    <div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:6px;">✅ 추천 아이템</div>
+    <ul class="item-list" style="margin-bottom:12px;">
+      {% for item in style_rec.recommended_items %}<li class="item-good">{{ item }}</li>{% endfor %}
     </ul>
-    <h3>❌ 피할 아이템</h3>
-    <ul class="item-list">
-      {% for item in style_rec.avoid_items %}
-      <li class="item-bad">{{ item }}</li>
-      {% endfor %}
+    <div style="font-size:12px;font-weight:700;color:#e05080;margin-bottom:6px;">❌ 피할 아이템</div>
+    <ul class="item-list" style="margin-bottom:12px;">
+      {% for item in style_rec.avoid_items %}<li class="item-bad">{{ item }}</li>{% endfor %}
     </ul>
+    <div style="font-size:12px;font-weight:700;color:#7755aa;margin-bottom:8px;">💇 헤어 · 신발 · 악세서리</div>
+    <div class="detail-item"><span class="detail-icon">💇</span><div><strong>헤어</strong><p>{{ style_rec.hair_rec }}</p></div></div>
+    <div class="detail-item"><span class="detail-icon">👟</span><div><strong>신발</strong><p>{{ style_rec.shoe_rec }}</p></div></div>
+    <div class="detail-item"><span class="detail-icon">👜</span><div><strong>악세서리</strong><p>{{ style_rec.acc_rec }}</p></div></div>
+    {% else %}
+    <p class="empty-msg">추천 데이터를 불러올 수 없어요.</p>
+    {% endif %}
   </div>
-
-  <!-- 헤어·신발·악세서리 카드 -->
-  <div class="card detail-card">
-    <h2>💇 헤어 · 신발 · 악세서리</h2>
-    <div class="detail-item">
-      <span class="detail-icon">💇</span>
-      <div>
-        <strong>헤어</strong>
-        <p>{{ style_rec.hair_rec }}</p>
-      </div>
-    </div>
-    <div class="detail-item">
-      <span class="detail-icon">👟</span>
-      <div>
-        <strong>신발</strong>
-        <p>{{ style_rec.shoe_rec }}</p>
-      </div>
-    </div>
-    <div class="detail-item">
-      <span class="detail-icon">👜</span>
-      <div>
-        <strong>악세서리</strong>
-        <p>{{ style_rec.acc_rec }}</p>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
 </div>
 
-<!-- 수석 디자이너 AI 코멘트 -->
-{% if ai_comment %}
-<div class="card designer-card">
-  <div class="designer-header">
-    <span class="designer-avatar">👨‍🎨</span>
-    <div>
-      <strong>수석 디자이너 코멘트</strong>
-      <span class="designer-badge">30년 경력</span>
+<!-- ③ 옷장(Item) 패널 -->
+<div class="panel" id="itemPanel">
+  <div class="panel-header">👗 Item
+    <button class="panel-close" onclick="closePanel('itemPanel')">✕</button>
+  </div>
+  <div class="panel-body">
+    {% for cat_name, items in [('상의', wardrobe_items|selectattr('category','eq','상의')|list),
+                                ('하의', wardrobe_items|selectattr('category','eq','하의')|list),
+                                ('원피스', wardrobe_items|selectattr('category','eq','원피스')|list),
+                                ('아우터', wardrobe_items|selectattr('category','eq','아우터')|list)] %}
+    <div class="category-sep">
+      {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% elif cat_name == '원피스' %}👗{% else %}🧥{% endif %} {{ cat_name }}
+    </div>
+    {% if items %}
+    <div class="wardrobe-panel-grid" style="margin-bottom:10px;">
+      {% for item in items %}
+      <div class="wardrobe-panel-item"
+           title="{{ item['item_type'] }}"
+           data-id="{{ item['id'] }}"
+           data-category="{{ item['category'] }}"
+           {% if item['image_path'] %}data-src="{{ url_for('static', filename=item['image_path'].replace('static/', '')) }}"{% endif %}
+           onclick="wearItem(this)">
+        {% if item['image_path'] %}
+        <img src="{{ url_for('static', filename=item['image_path'].replace('static/', '')) }}"
+             alt="{{ item['item_type'] }}"
+             onerror="this.parentElement.innerHTML='<span class=\'no-img\'>👚</span>'">
+        {% else %}<span class="no-img">👚</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:#ccc;font-size:11px;padding:4px 0 10px;">아직 {{ cat_name }} 아이템이 없어요</p>
+    {% endif %}
+    {% endfor %}
+    <a href="{{ url_for('wardrobe') }}" class="btn btn-primary btn-full">+ 옷 추가하러 가기</a>
+  </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
+</div>
+
+<!-- ④ 수석 디자이너 패널 -->
+<div class="panel" id="designerPanel">
+  <div class="panel-header">👨‍🎨 수석 디자이너
+    <button class="panel-close" onclick="closePanel('designerPanel')">✕</button>
+  </div>
+  <div class="panel-body">
+    {% if ai_comment %}
+    <div class="designer-header">
+      <div class="designer-avatar">👨‍🎨</div>
+      <div><strong style="font-size:13px;">수석 디자이너</strong><span class="designer-badge">30년 경력</span></div>
+    </div>
+    <div class="designer-comment">{{ ai_comment | replace('\n', '<br>') | safe }}</div>
+    {% else %}
+    <p class="empty-msg">AI 코멘트를 불러올 수 없어요.</p>
+    {% endif %}
+  </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
+</div>
+
+<!-- ⑤ 채팅 패널 -->
+<div class="panel" id="chatPanel">
+  <div class="panel-header">💬 스타일 상담
+    <button class="panel-close" onclick="closePanel('chatPanel')">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="chat-window" id="chatWindow">
+      <div class="chat-msg assistant">
+        안녕하세요! 30년 경력 수석 디자이너예요 😊<br>오늘 코디나 스타일에 대해 뭐든 물어봐요!
+      </div>
+    </div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="예: 오늘 데이트 코디 추천해줘">
+      <button id="chatSend" class="btn btn-primary btn-sm">전송</button>
     </div>
   </div>
-  <div class="designer-comment">
-    {{ ai_comment | replace('\n', '<br>') | safe }}
-  </div>
-</div>
-{% endif %}
-
-<!-- 챗봇 -->
-<div class="card chatbot-card">
-  <h2>💬 스타일 상담하기</h2>
-  <p class="subtitle">수석 디자이너에게 스타일 고민을 물어보세요</p>
-
-  <div class="chat-window" id="chatWindow">
-    <div class="chat-msg assistant">
-      안녕하세요! 30년 경력의 수석 디자이너예요.<br>
-      오늘 코디나 스타일에 대해 뭐든 물어봐요 😊
-    </div>
-  </div>
-
-  <div class="chat-input-row">
-    <input type="text" id="chatInput" placeholder="예: 오늘 데이트인데 뭐 입으면 좋을까요?" />
-    <button id="chatSend" class="btn btn-primary">전송</button>
-  </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
 </div>
 
+<!-- ⑥ 프로필 패널 -->
+<div class="panel" id="profilePanel">
+  <div class="panel-header">👤 내 정보
+    <button class="panel-close" onclick="closePanel('profilePanel')">✕</button>
+  </div>
+  <div class="panel-body">
+    {% if profile %}
+    <div class="profile-info-row"><span>이름</span><span>{{ profile.get('name', '미입력') }}</span></div>
+    <div class="profile-info-row"><span>성별</span><span>{{ profile.get('gender', '미입력') }}</span></div>
+    <div class="profile-info-row"><span>키 / 몸무게</span><span>{{ profile.get('height', '?') }}cm / {{ profile.get('weight', '?') }}kg</span></div>
+    <div class="profile-info-row"><span>체형</span><span>{{ profile.get('body_type', '보통') }}</span></div>
+    <div class="profile-info-row"><span>선호 스타일</span><span>{{ profile.get('style_pref', '캐주얼') }}</span></div>
+    <div class="profile-info-row"><span>TPO</span><span>{{ profile.get('tpo', '일상') }}</span></div>
+    {% else %}
+    <p class="empty-msg">아직 프로필이 없어요</p>
+    {% endif %}
+    <a href="{{ url_for('profile') }}" class="profile-edit-btn">✏️ 정보 수정하기</a>
+  </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
 <script>
-  // 챗봇 context (현재 날씨·추천 정보 전달)
   const chatContext = {
     {% if style_rec %}
     weather_label: "{{ style_rec.condition_label }}",
     recommended_items: "{{ style_rec.recommended_items | join(', ') }}",
     {% endif %}
-    tpo: "{{ profile.get('tpo', '일상') }}"
+    tpo: "{{ profile.get('tpo', '일상') }}",
+    wardrobe: [
+      {% for item in wardrobe_items %}
+      {"category":"{{ item['category'] }}","item_type":"{{ item['item_type'] }}","warmth":{{ item['warmth'] }},"texture":"{{ item['texture'] }}"}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ]
   };
 </script>
 {% endblock %}
