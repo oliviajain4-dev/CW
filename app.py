@@ -277,7 +277,9 @@ def wardrobe_add():
                     """, (user_id, save_path, category, info["item"],
                           info["warmth"], info["texture"], datetime.now().isoformat()))
     except Exception as e:
+        import traceback
         print(f"이미지 분석 오류: {e}")
+        traceback.print_exc()
 
     return redirect(url_for("wardrobe"))
 
