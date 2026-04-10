@@ -3,23 +3,57 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}내 옷장의 코디{% endblock %}</title>
+  <title>{% block title %}My Mini Co-di{% endblock %}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <nav class="navbar">
-    <a class="nav-logo" href="{{ url_for('dashboard') }}">👗 내 옷장의 코디</a>
-    <div class="nav-links">
-      <a href="{{ url_for('dashboard') }}">대시보드</a>
-      <a href="{{ url_for('wardrobe') }}">내 옷장</a>
-      <a href="{{ url_for('profile') }}">내 정보</a>
+
+  <!-- 방 배경 이미지 -->
+  <div class="room-scene"></div>
+
+  <!-- 상단 네비게이션 -->
+  <nav class="game-nav">
+    <a class="nav-logo" href="{{ url_for('dashboard') }}">
+      <span>👗</span> My Mini Co-di
+    </a>
+    <div class="nav-center">
+      <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}class="active"{% endif %}>Home</a>
+      <a href="{{ url_for('wardrobe') }}" {% if request.endpoint == 'wardrobe' %}class="active"{% endif %}>My Wardrobe</a>
+      <a href="{{ url_for('profile') }}" {% if request.endpoint == 'profile' %}class="active"{% endif %}>Profile</a>
+    </div>
+    <div class="nav-right">
+      {% if request.endpoint == 'dashboard' %}
+      <button class="nav-icon-btn" onclick="togglePanel('chatPanel')" title="채팅">💬</button>
+      {% endif %}
+      <button class="nav-icon-btn" onclick="location.href='{{ url_for('profile') }}'" title="설정">⚙️</button>
     </div>
   </nav>
 
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+  <!-- 왼쪽 사이드바 -->
+  <div class="sidebar">
+    <div class="sidebar-avatar" title="내 미니미">🧍‍♀️</div>
+    <div class="sidebar-divider"></div>
+    {% block sidebar %}{% endblock %}
+  </div>
 
+  <!-- 페이지별 콘텐츠 -->
+  {% block content %}{% endblock %}
+
+  <!-- 하단 바 -->
+  <div class="bottom-bar">
+    <a href="{{ url_for('dashboard') }}">🏠 Home</a>
+    <a href="{{ url_for('wardrobe') }}">👗 Wardrobe</a>
+    <a href="{{ url_for('profile') }}">👤 Profile</a>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    if (typeof marked !== "undefined") {
+      marked.setOptions({ breaks: true, gfm: true });
+    }
+  </script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

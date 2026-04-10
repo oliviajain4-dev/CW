@@ -29,7 +29,9 @@ RUN pip install --no-cache-dir \
     requests \
     anthropic \
     pillow \
-    werkzeug
+    werkzeug \
+    transformers \
+    cloudinary
 
 # open_clip (Marqo FashionSigLIP 모델용)
 RUN pip install --no-cache-dir open_clip_torch
