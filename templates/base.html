@@ -4,60 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}My Mini Co-di{% endblock %}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
 
-  <!-- 방 배경 -->
-  <div class="room-scene">
-    <div class="room-ceiling-light"></div>
-    <!-- 창문 + 커튼 -->
-    <div class="room-window"></div>
-    <div class="curtain-rod"></div>
-    <div class="curtain-l"></div>
-    <div class="curtain-r"></div>
-    <!-- 가구 -->
-    <div class="room-shelf">
-      <div class="shelf-row">
-        <div class="shelf-book" style="width:10px;height:28px;background:#e05080;"></div>
-        <div class="shelf-book" style="width:8px;height:22px;background:#9966cc;"></div>
-        <div class="shelf-book" style="width:12px;height:30px;background:#f0a030;"></div>
-        <div class="shelf-book" style="width:8px;height:20px;background:#30a0d0;"></div>
-        <div class="shelf-book" style="width:10px;height:26px;background:#60c060;"></div>
-      </div>
-      <div class="shelf-row">
-        <div style="font-size:16px;">🧸</div>
-        <div style="font-size:14px;">🪴</div>
-      </div>
-    </div>
-    <div class="room-picture">👗</div>
-    <div class="room-desk">
-      <div class="desk-top"></div>
-      <div class="desk-body">
-        <div class="desk-monitor">💻</div>
-        <div class="desk-lamp">🪔</div>
-      </div>
-      <div class="desk-legs">
-        <div class="desk-leg"></div>
-        <div class="desk-leg"></div>
-      </div>
-    </div>
-    <!-- 침대 -->
-    <div class="room-bed">
-      <div class="bed-headboard">
-        <div class="bed-headboard-stud"></div>
-        <div class="bed-headboard-stud"></div>
-        <div class="bed-headboard-stud"></div>
-      </div>
-      <div class="bed-mattress">
-        <div class="bed-pillow"></div>
-        <div class="bed-pillow2"></div>
-      </div>
-      <div class="bed-blanket"></div>
-    </div>
-    <!-- 카펫 -->
-    <div class="room-rug"></div>
-  </div>
+  <!-- 방 배경 이미지 -->
+  <div class="room-scene"></div>
 
   <!-- 상단 네비게이션 -->
   <nav class="game-nav">
@@ -89,13 +42,17 @@
 
   <!-- 하단 바 -->
   <div class="bottom-bar">
-    <a href="{{ url_for('dashboard') }}">Home</a>
-    <a href="{{ url_for('wardrobe') }}">Wardrobe</a>
-    <a href="{{ url_for('profile') }}">Profile</a>
-    <span style="color:#ddd">|</span>
-    <span style="font-size:10px;color:#ccc">© My Mini Co-di</span>
+    <a href="{{ url_for('dashboard') }}">🏠 Home</a>
+    <a href="{{ url_for('wardrobe') }}">👗 Wardrobe</a>
+    <a href="{{ url_for('profile') }}">👤 Profile</a>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    if (typeof marked !== "undefined") {
+      marked.setOptions({ breaks: true, gfm: true });
+    }
+  </script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
