@@ -201,10 +201,11 @@ def init_db():
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id     TEXT,
                 image_path  TEXT,
-                category    TEXT,
-                item_type   TEXT,
+                category    TEXT NOT NULL,
+                item_type   TEXT NOT NULL,
                 warmth      INTEGER DEFAULT 1,
                 texture     TEXT,
+                color_tone  TEXT,
                 created_at  TEXT
             )
         """)
@@ -222,6 +223,18 @@ def init_db():
                 created_at TEXT, updated_at TEXT
             )
         """)
+        # 기존 DB에 누락된 컬럼 추가 마이그레이션
+        # SQLite는 IF NOT EXISTS 미지원 → try/except로 처리
+        for col, definition in [
+            ("email",         "TEXT"),
+            ("password_hash", "TEXT"),
+            ("google_id",     "TEXT"),
+            ("avatar_url",    "TEXT"),
+        ]:
+            try:
+                execute(conn, f"ALTER TABLE users ADD COLUMN {col} {definition}")
+            except Exception:
+                pass  # 이미 존재하면 무시
     print(f"[DB] {db_engine()} 초기화 완료")
 
 
@@ -424,7 +437,7 @@ def dashboard():
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
             (current_user.id,)
         )
     return render_template("dashboard.html",
@@ -476,7 +489,7 @@ def wardrobe():
     with get_db() as conn:
         items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY category, created_at DESC",
             (current_user.id,)
         )
     categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
@@ -498,34 +511,31 @@ def wardrobe_add():
     if not files:
         return redirect(url_for("wardrobe"))
 
-    profile = load_profile()
-    user_id = profile.get("id")
+    user_id = current_user.id
     errors  = []
 
+    from model import analyze_outfit
+
     for file in files:
-        filename  = secure_filename(file.filename)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
-        filename  = timestamp + filename
+        filename   = secure_filename(file.filename)
+        timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S_")
+        filename   = timestamp + filename
         local_path = os.path.join(app.config["UPLOAD_FOLDER"], filename).replace("\\", "/")
         file.save(local_path)
 
         try:
-            # 1) AI 분석 먼저 — 실패 시 예외 발생 → 로컬 파일만 삭제하고 skip
-            from model import analyze_outfit
             result = analyze_outfit(local_path)
 
-            # 2) 분석 성공 후 Cloudinary 업로드 (user별 폴더로 저장)
-            save_path = upload_image(local_path, user_id=user_id, subfolder="wardrobe")
-
-            # 3) 결과에서 카테고리/아이템 추출 (model이 하나만 반환)
             category = next((k for k in ["아우터", "원피스", "상의", "하의"] if k in result), None)
             if category is None:
                 raise ValueError("분석 결과에 카테고리가 없습니다.")
 
-            item_info    = result[category]  # type: ignore[index]
-            item_name    = str(item_info["item"])    # type: ignore[index]
-            item_warmth  = int(item_info["warmth"])  # type: ignore[index]
-            item_texture = str(item_info["texture"]) # type: ignore[index]
+            item_info    = result[category]
+            item_name    = str(item_info["item"])
+            item_warmth  = int(item_info["warmth"])
+            item_texture = str(item_info["texture"])
+
+            save_path = upload_image(local_path, user_id=user_id, subfolder="wardrobe")
 
             with get_db() as conn:
                 if is_postgres():
@@ -542,9 +552,7 @@ def wardrobe_add():
                     """, (user_id, save_path, category, item_name, item_warmth, item_texture,
                           datetime.now().isoformat()))
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            # 분석 실패 시 로컬 임시 파일 삭제
+            import traceback; traceback.print_exc()
             if os.path.exists(local_path):
                 os.remove(local_path)
             errors.append(f"{file.filename}: AI 분석 실패 — {e}")
@@ -663,15 +671,18 @@ def api_recommend():
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
         # 옷장 먼저 조회 — AI 프롬프트 + 캐시 키 + 이미지 매칭에 모두 사용
+        user_id = profile.get("id")
+        ph = "%s" if is_postgres() else "?"
         with get_db() as conn:
             all_items = fetchall(
                 conn,
-                "SELECT id, category, item_type, warmth, texture, image_path "
-                "FROM wardrobe_items ORDER BY created_at DESC"
+                f"SELECT id, category, item_type, warmth, texture, image_path "
+                f"FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
+                (user_id,)
             )
 
-        # 캐시 키에 옷장 수 포함 → 옷 추가/삭제 시 자동 무효화
-        cache_key = f"{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
+        # 캐시 키에 user_id + 옷장 수 포함 → 유저 구분 + 옷 추가/삭제 시 자동 무효화
+        cache_key = f"{user_id},{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
         cached = _recommend_cache.get(cache_key)
         if cached and time.time() - cached["ts"] < _CACHE_TTL:
             return jsonify(cached["data"])
@@ -700,7 +711,6 @@ def api_recommend():
         bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
 
         # 스타일 로그 DB 저장
-        user_id = profile.get("id")
         save_style_log(user_id, weather, style_rec, layering, comment, tpo)
 
         # ── 날씨에 맞는 옷장 이미지 매칭 (패널 표시용) ────────────
@@ -755,10 +765,14 @@ def api_shopping():
         nx = int(profile.get("location_nx") or profile.get("nx") or 62)
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
+        ph = "%s" if is_postgres() else "?"
+        user_id = profile.get("id")
         with get_db() as conn:
             all_items = fetchall(
                 conn,
-                "SELECT category, item_type, warmth, texture FROM wardrobe_items ORDER BY created_at DESC"
+                f"SELECT category, item_type, warmth, texture FROM wardrobe_items "
+                f"WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
+                (user_id,)
             )
 
         weather   = get_weather(nx=nx, ny=ny)

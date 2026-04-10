@@ -38,15 +38,25 @@ except ImportError:
     REMBG_AVAILABLE = False
     print("rembg 없음 → 배경제거 스킵 (pip install rembg)")
 
-# ── 모델 로드 ───────────────────────────────────
-if TORCH_AVAILABLE:
-    model, _, preprocess = open_clip.create_model_and_transforms(
+# ── 모델 지연 로드 (첫 분석 요청 시에만 로드) ────────────────────
+# import 시점에 로드하면 컨테이너 시작마다 ~600MB 모델을 기다려야 함
+_model     = None
+_preprocess = None
+_tokenizer  = None
+
+def _ensure_model():
+    global _model, _preprocess, _tokenizer
+    if _model is not None:
+        return
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("AI 분석 모듈(torch/open_clip)이 설치되지 않았습니다.")
+    print("[model.py] FashionSigLIP 모델 로딩 중... (최초 1회만)")
+    _model, _, _preprocess = open_clip.create_model_and_transforms(
         'hf-hub:Marqo/marqo-fashionSigLIP'
     )
-    tokenizer = open_clip.get_tokenizer('hf-hub:Marqo/marqo-fashionSigLIP')
-    model.eval()
-else:
-    model = preprocess = tokenizer = None
+    _tokenizer = open_clip.get_tokenizer('hf-hub:Marqo/marqo-fashionSigLIP')
+    _model.eval()
+    print("[model.py] 모델 로드 완료")
 
 # ── 텍스트 임베딩 사전 캐시 (라벨은 고정이므로 한 번만 계산) ──
 _text_features_cache = {}
@@ -147,20 +157,22 @@ def analyze_outfit(image_path, remove_bg=True):
     if not TORCH_AVAILABLE or not PIL_AVAILABLE:
         raise RuntimeError("AI 분석 모듈(torch/PIL)이 설치되지 않았습니다.")
 
+    _ensure_model()  # 첫 호출 시에만 모델 다운로드/로드
+
     image = preprocess_image(image_path, remove_bg=remove_bg)
-    tensor = preprocess(image).unsqueeze(0)  # type: ignore[operator]
+    tensor = _preprocess(image).unsqueeze(0)  # type: ignore[operator]
     result: dict = {}
     total_warmth = 0
 
     with torch.no_grad():  # type: ignore[attr-defined]
-        image_features = model.encode_image(tensor)  # type: ignore[operator]
+        image_features = _model.encode_image(tensor)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
         # ── 각 그룹별 최고 확률 예측 (텍스트 임베딩 캐시) ──
         def get_score(part, labels):
             if part not in _text_features_cache:
-                text  = tokenizer(labels)  # type: ignore[operator]
-                feats = model.encode_text(text)  # type: ignore[operator]
+                text  = _tokenizer(labels)  # type: ignore[operator]
+                feats = _model.encode_text(text)  # type: ignore[operator]
                 feats = feats / feats.norm(dim=-1, keepdim=True)
                 _text_features_cache[part] = feats
             feats = _text_features_cache[part]
@@ -203,6 +215,82 @@ def analyze_outfit(image_path, remove_bg=True):
 
     result["총_보온도"] = total_warmth
     return result
+
+# ── 배치 분석 (여러 장 한 번에) ─────────────────────────────────────
+def analyze_outfit_batch(image_paths: list) -> list:
+    """
+    여러 이미지를 배치로 한 번에 분석.
+    encode_image를 N번 → 1번으로 줄여 CPU 추론 시간 대폭 단축.
+
+    반환: analyze_outfit()과 동일한 dict의 리스트
+    """
+    if not TORCH_AVAILABLE or not PIL_AVAILABLE:
+        raise RuntimeError("AI 분석 모듈(torch/PIL)이 설치되지 않았습니다.")
+
+    _ensure_model()
+
+    # 전처리 → 배치 텐서 (N, 3, 224, 224)
+    tensors = [_preprocess(preprocess_image(p)) for p in image_paths]
+    batch   = torch.stack(tensors)  # type: ignore[attr-defined]
+
+    results = []
+    with torch.no_grad():  # type: ignore[attr-defined]
+        # 핵심: N장을 한 번의 forward pass로 처리
+        image_features = _model.encode_image(batch)  # type: ignore[operator]
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+
+        # 텍스트 임베딩 (캐시 — 최초 1회만 계산)
+        def get_feats(part, labels):
+            if part not in _text_features_cache:
+                text  = _tokenizer(labels)  # type: ignore[operator]
+                feats = _model.encode_text(text)  # type: ignore[operator]
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+                _text_features_cache[part] = feats
+            return _text_features_cache[part]
+
+        outer_feats  = get_feats("아우터", outer_labels)
+        dress_feats  = get_feats("원피스", dress_labels)
+        top_feats    = get_feats("상의",   top_labels)
+        bottom_feats = get_feats("하의",   bottom_labels)
+
+        for i in range(len(image_paths)):
+            feat = image_features[i:i+1]  # (1, D)
+
+            outer_probs  = (feat @ outer_feats.T).softmax(dim=-1)
+            dress_probs  = (feat @ dress_feats.T).softmax(dim=-1)
+            top_probs    = (feat @ top_feats.T).softmax(dim=-1)
+            bottom_probs = (feat @ bottom_feats.T).softmax(dim=-1)
+
+            outer_pred  = outer_labels[outer_probs.argmax()]
+            dress_pred  = dress_labels[dress_probs.argmax()]
+            top_pred    = top_labels[top_probs.argmax()]
+            bottom_pred = bottom_labels[bottom_probs.argmax()]
+
+            has_outer = (outer_pred != "no outer" and outer_probs.max().item() > 0.5)
+            has_dress = (dress_pred != "no dress" and dress_probs.max().item() > 0.6)
+
+            if has_outer:
+                final_category, final_item = "아우터", outer_pred
+            elif has_dress:
+                final_category, final_item = "원피스", dress_pred
+            elif top_probs.max().item() >= bottom_probs.max().item():
+                final_category, final_item = "상의", top_pred
+            else:
+                final_category, final_item = "하의", bottom_pred
+
+            info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
+            results.append({
+                final_category: {
+                    "item":      final_item,
+                    "thickness": info["thickness"],
+                    "warmth":    info["warmth"],
+                    "texture":   info["texture"],
+                },
+                "총_보온도": info["warmth"],
+            })
+
+    return results
+
 
 # ── 보온도 기반 계절 추론 ────────────────────────
 def infer_season(warmth_score):

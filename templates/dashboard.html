@@ -298,13 +298,30 @@
   };
 
   // ── 날씨·추천·AI 코멘트 비동기 로딩 ──────────────────────────────
+  function weatherIcon(slot) {
+    const pty = slot.pty, sky = slot.sky;
+    if (pty === 1 || pty === 4) return '☔';
+    if (pty === 2)              return '🌨';
+    if (pty === 3)              return '❄️';
+    if (sky === 1)              return '☀️';
+    if (sky === 3)              return '⛅';
+    return '☁️';
+  }
+
   function fillWeatherPanel(weather, style_rec, layering) {
     const el = document.getElementById('weatherBody');
-    let html = `<div class="weather-temps">
-      <div class="temp-block"><span class="temp-label">아침</span><span class="temp-value">${weather.morning.feels_like}°</span></div>
-      <div class="temp-block"><span class="temp-label">낮</span><span class="temp-value">${weather.afternoon.feels_like}°</span></div>
-      <div class="temp-block"><span class="temp-label">저녁</span><span class="temp-value">${weather.evening.feels_like}°</span></div>
-    </div>`;
+    const slots = [
+      { label: '아침', data: weather.morning },
+      { label: '낮',   data: weather.afternoon },
+      { label: '저녁', data: weather.evening },
+    ];
+    const blocks = slots.map(s => `
+      <div class="temp-block">
+        <span class="temp-icon">${weatherIcon(s.data)}</span>
+        <span class="temp-label">${s.label}</span>
+        <span class="temp-value">${s.data.feels_like}°</span>
+      </div>`).join('');
+    let html = `<div class="weather-temps">${blocks}</div>`;
     if (style_rec) {
       html += `<div class="weather-label">${style_rec.condition_label}</div>`;
       if (layering && layering.layering_needed) {
