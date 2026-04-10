@@ -36,53 +36,6 @@ PROFILE_PATH  = "user_profile.json"    # SQLite 환경용 폴백
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# ── Cloudinary 설정 ────────────────────────────────────────────────
-import cloudinary
-import cloudinary.uploader
-
-_CLOUDINARY_ENABLED = bool(os.getenv("CLOUDINARY_CLOUD_NAME"))
-if _CLOUDINARY_ENABLED:
-    cloudinary.config(
-        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
-        api_key    = os.getenv("CLOUDINARY_API_KEY"),
-        api_secret = os.getenv("CLOUDINARY_API_SECRET"),
-        secure     = True,
-    )
-
-
-def upload_image(file_path: str) -> str:
-    """로컬 파일을 Cloudinary에 업로드하고 URL 반환. 실패 시 로컬 경로 반환."""
-    if not _CLOUDINARY_ENABLED:
-        return file_path
-    try:
-        result = cloudinary.uploader.upload(
-            file_path,
-            folder="codi_wardrobe",
-            resource_type="image",
-        )
-        return result["secure_url"]
-    except Exception as e:
-        print(f"Cloudinary 업로드 실패, 로컬 경로 사용: {e}")
-        return file_path
-
-
-def delete_image(image_path: str) -> None:
-    """Cloudinary URL이면 Cloudinary에서 삭제, 로컬 경로면 파일 삭제."""
-    if not image_path:
-        return
-    if image_path.startswith("http"):
-        # Cloudinary URL에서 public_id 추출 (folder/filename 형식)
-        try:
-            parts = image_path.split("/")
-            # .../codi_wardrobe/filename.jpg → codi_wardrobe/filename (확장자 제거)
-            public_id = "/".join(parts[-2:]).rsplit(".", 1)[0]
-            cloudinary.uploader.destroy(public_id)
-        except Exception as e:
-            print(f"Cloudinary 삭제 실패: {e}")
-    else:
-        if os.path.exists(image_path) and "uploads" in image_path:
-            os.remove(image_path)
-
 # ── 날씨/AI 추천 캐시 (30분) ──────────────────────
 _dashboard_cache = {"data": None, "ts": 0}
 CACHE_TTL = 30 * 60  # 30분
@@ -259,43 +212,34 @@ def wardrobe_add():
         filename  = secure_filename(file.filename)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
         filename  = timestamp + filename
-        local_path = os.path.join(app.config["UPLOAD_FOLDER"], filename).replace("\\", "/")
-        file.save(local_path)
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename).replace("\\", "/")
+        file.save(save_path)
 
         try:
             from model import analyze_outfit
-            result = analyze_outfit(local_path)
+            result = analyze_outfit(save_path)
 
-            # Cloudinary 업로드 (성공 시 URL, 실패 시 로컬 경로)
-            save_path = upload_image(local_path)
-
-            # 분석 결과에서 저장할 카테고리 하나만 추출 (best_main 로직)
-            best_category = None
-            best_item = None
-            for category in ["아우터", "상의", "하의"]:
-                info = result[category]
-                if info["item"] not in ("없음", "분석불가"):
-                    best_category = category
-                    best_item = info
-                    break
-
-            if best_category and best_item:
-                save_category = "원피스" if best_item["item"] == "dress" else best_category
-                with get_db() as conn:
+            with get_db() as conn:
+                for category in ["상의", "하의", "아우터"]:
+                    info = result[category]
+                    if info["item"] == "없음":
+                        continue
+                    # dress는 하의가 아닌 원피스로 저장
+                    save_category = "원피스" if info["item"] == "dress" else category
                     if is_postgres():
                         execute(conn, """
                             INSERT INTO wardrobe_items
                                 (user_id, image_path, category, item_type, warmth, texture, created_at)
                             VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                        """, (user_id, save_path, save_category, best_item["item"],
-                              best_item["warmth"], best_item["texture"]))
+                        """, (user_id, save_path, save_category, info["item"],
+                              info["warmth"], info["texture"]))
                     else:
                         execute(conn, """
                             INSERT INTO wardrobe_items
                                 (user_id, image_path, category, item_type, warmth, texture, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (user_id, save_path, save_category, best_item["item"],
-                              best_item["warmth"], best_item["texture"], datetime.now().isoformat()))
+                        """, (user_id, save_path, save_category, info["item"],
+                              info["warmth"], info["texture"], datetime.now().isoformat()))
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -326,14 +270,14 @@ def wardrobe_delete(item_id):
     with get_db() as conn:
         row = fetchone(conn, f"SELECT image_path FROM wardrobe_items WHERE id={ph}", (item_id,))
         if row:
-            img_path = str(row["image_path"] or "")  # type: ignore[arg-type, index]
-            # id 기준으로 해당 항목만 삭제
-            execute(conn, f"DELETE FROM wardrobe_items WHERE id={ph}", (item_id,))
-            # 같은 image_path를 참조하는 다른 행이 없을 때만 이미지 삭제
+            img_path = row.get("image_path", "")
+            # 같은 image_path로 등록된 모든 행 한 번에 삭제
             if img_path:
-                remaining = fetchone(conn, f"SELECT id FROM wardrobe_items WHERE image_path={ph}", (img_path,))
-                if remaining is None:
-                    delete_image(img_path)
+                execute(conn, f"DELETE FROM wardrobe_items WHERE image_path={ph}", (img_path,))
+                if os.path.exists(img_path) and "uploads" in img_path:
+                    os.remove(img_path)
+            else:
+                execute(conn, f"DELETE FROM wardrobe_items WHERE id={ph}", (item_id,))
     return redirect(url_for("wardrobe"))
 
 
