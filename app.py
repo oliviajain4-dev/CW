@@ -36,6 +36,18 @@ PROFILE_PATH  = "user_profile.json"    # SQLite 환경용 폴백
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+
+@app.template_filter("img_url")
+def img_url_filter(image_path: str) -> str:
+    """Cloudinary URL이면 그대로, 로컬 경로면 /static/... 형태로 변환"""
+    if not image_path:
+        return ""
+    if image_path.startswith("http"):
+        return image_path
+    clean = image_path.replace("\\", "/").replace("static/", "")
+    return f"/static/{clean}"
+
+
 # ── Cloudinary 설정 ────────────────────────────────────────────────
 import cloudinary
 import cloudinary.uploader
