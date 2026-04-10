@@ -16,6 +16,7 @@ app.py — 내 옷장의 코디 Flask 웹 대시보드
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 import os
 import json
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
@@ -34,6 +35,10 @@ ALLOWED_EXT   = {"jpg", "jpeg", "png"}
 PROFILE_PATH  = "user_profile.json"    # SQLite 환경용 폴백
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+# ── 날씨/AI 추천 캐시 (30분) ──────────────────────
+_dashboard_cache = {"data": None, "ts": 0}
+CACHE_TTL = 30 * 60  # 30분
 
 
 # ── 유틸 ──────────────────────────────────────────────────────────
@@ -135,53 +140,70 @@ def save_profile_data(data: dict) -> str:
 # ── 라우트 ────────────────────────────────────────────────────────
 @app.route("/")
 def dashboard():
+    global _dashboard_cache
     profile = load_profile()
 
-    weather_chatbot = None
-    style_rec       = None
-    layering        = None
-    ai_comment      = None
-    style_log_id    = None
+    # ── 캐시 확인 (30분) ──────────────────────────
+    now_ts = time.time()
+    cached = _dashboard_cache["data"]
+    if cached and (now_ts - _dashboard_cache["ts"]) < CACHE_TTL:
+        weather_chatbot = cached["weather"]
+        style_rec       = cached["style_rec"]
+        layering        = cached["layering"]
+        ai_comment      = cached["ai_comment"]
+        style_log_id    = cached["style_log_id"]
+    else:
+        weather_chatbot = None
+        style_rec       = None
+        layering        = None
+        ai_comment      = None
+        style_log_id    = None
 
-    try:
-        from chatbot.weather_client import get_weather as get_weather_chatbot
-        from chatbot.weather_style_mapper import get_style_recommendation, get_layering_recommendation
-        from chatbot.llm_client import get_outfit_comment
+        try:
+            from chatbot.weather_client import get_weather as get_weather_chatbot
+            from chatbot.weather_style_mapper import get_style_recommendation, get_layering_recommendation
+            from chatbot.llm_client import get_outfit_comment
 
-        sensitivity = int(profile.get("sensitivity", 3))
-        tpo         = profile.get("tpo", "일상")
-        nx          = int(profile.get("location_nx") or profile.get("nx") or 62)
-        ny          = int(profile.get("location_ny") or profile.get("ny") or 123)
+            sensitivity = int(profile.get("sensitivity", 3))
+            tpo         = profile.get("tpo", "일상")
+            nx          = int(profile.get("location_nx") or profile.get("nx") or 62)
+            ny          = int(profile.get("location_ny") or profile.get("ny") or 123)
 
-        weather_chatbot = get_weather_chatbot(nx=nx, ny=ny)
-        style_rec = get_style_recommendation(
-            weather_chatbot["morning"]["feels_like"],
-            weather_chatbot["morning"]["reh"],
-            weather_chatbot["morning"]["sky"],
-            weather_chatbot["morning"]["pty"],
-            sensitivity
-        )
-        layering   = get_layering_recommendation(weather_chatbot, sensitivity)
-        ai_comment = get_outfit_comment(
-            weather_chatbot, style_rec, layering, tpo,
-            profile if profile else None
-        )
+            weather_chatbot = get_weather_chatbot(nx=nx, ny=ny)
+            style_rec = get_style_recommendation(
+                weather_chatbot["morning"]["feels_like"],
+                weather_chatbot["morning"]["reh"],
+                weather_chatbot["morning"]["sky"],
+                weather_chatbot["morning"]["pty"],
+                sensitivity
+            )
+            layering   = get_layering_recommendation(weather_chatbot, sensitivity)
+            ai_comment = get_outfit_comment(
+                weather_chatbot, style_rec, layering, tpo,
+                profile if profile else None
+            )
 
-        # 추천 결과 DB 저장 (누적)
-        user_id = profile.get("id")
-        style_log_id = save_style_log(
-            user_id, weather_chatbot, style_rec, layering, ai_comment, tpo
-        )
+            # 추천 결과 DB 저장 (누적)
+            user_id = profile.get("id")
+            style_log_id = save_style_log(
+                user_id, weather_chatbot, style_rec, layering, ai_comment, tpo
+            )
 
-    except Exception as e:
-        ai_comment = f"(날씨/AI 연결 오류: {e})"
+            # 캐시 저장
+            _dashboard_cache["data"] = {
+                "weather": weather_chatbot, "style_rec": style_rec,
+                "layering": layering, "ai_comment": ai_comment,
+                "style_log_id": style_log_id
+            }
+            _dashboard_cache["ts"] = now_ts
+
+        except Exception as e:
+            ai_comment = f"(날씨/AI 연결 오류: {e})"
 
     # 옷장 아이템
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
-            "SELECT * FROM wardrobe_items ORDER BY created_at DESC"
-            if is_postgres() else
             "SELECT * FROM wardrobe_items ORDER BY created_at DESC"
         )
 
