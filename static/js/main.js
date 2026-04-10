@@ -178,7 +178,7 @@ function togglePanel(id) {
   const isOpen = panel.classList.contains('open');
 
   // 왼쪽 패널끼리는 하나만 열기 (같은 위치 겹치므로)
-  const leftPanels = ['weatherPanel','stylePanel','itemPanel','designerPanel'];
+  const leftPanels = ['weatherPanel','stylePanel','itemPanel','designerPanel','shoppingPanel'];
   if (leftPanels.includes(id)) {
     leftPanels.forEach(p => { if (p !== id) closePanel(p); });
   }
@@ -195,6 +195,7 @@ function togglePanel(id) {
     const btnMap = {
       weatherPanel: 'btn-weather', stylePanel: 'btn-style',
       itemPanel: 'btn-item', designerPanel: 'btn-designer',
+      shoppingPanel: 'btn-shopping',
       chatPanel: 'btn-chat', profilePanel: 'btn-profile'
     };
     const btn = document.getElementById(btnMap[id]);
@@ -209,6 +210,7 @@ function closePanel(id) {
   const btnMap = {
     weatherPanel: 'btn-weather', stylePanel: 'btn-style',
     itemPanel: 'btn-item', designerPanel: 'btn-designer',
+    shoppingPanel: 'btn-shopping',
     chatPanel: 'btn-chat', profilePanel: 'btn-profile'
   };
   const btn = document.getElementById(btnMap[id]);
@@ -251,7 +253,11 @@ function appendMsg(text, role) {
   if (!chatWindow) return;
   const div = document.createElement("div");
   div.className = `chat-msg ${role}`;
-  div.innerHTML = text.replace(/\n/g, "<br>");
+  if (role === "assistant" && typeof marked !== "undefined") {
+    div.innerHTML = marked.parse(text);
+  } else {
+    div.textContent = text;
+  }
   chatWindow.appendChild(div);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }

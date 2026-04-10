@@ -549,13 +549,12 @@ body {
   width: 280px;
   min-width: 200px;
   min-height: 120px;
+  max-height: 80vh;
   overflow: hidden;
   animation: panelIn 0.2s ease;
-  /* flex로 구성해서 body가 남은 높이 채움 */
   flex-direction: column;
 }
 .panel.open { display: flex; }
-.panel.open { display: block; }
 @keyframes panelIn {
   from { opacity: 0; transform: scale(0.92) translateY(-8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
@@ -757,10 +756,41 @@ body {
 }
 .designer-comment {
   font-size: 12px; line-height: 1.75; color: #444;
-  max-height: 200px; overflow-y: auto;
 }
-.designer-comment::-webkit-scrollbar { width: 3px; }
-.designer-comment::-webkit-scrollbar-thumb { background: #f0a0b8; border-radius: 3px; }
+.designer-comment-wrap {
+  position: relative;
+}
+.designer-comment-wrap.collapsed {
+  max-height: 160px;
+  overflow: hidden;
+}
+.designer-fade {
+  display: none;
+}
+.designer-comment-wrap.collapsed .designer-fade {
+  display: block;
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 48px;
+  background: linear-gradient(transparent, #fff);
+  pointer-events: none;
+}
+.designer-toggle-btn {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 0;
+  background: none;
+  border: 1px solid #e8c0d0;
+  border-radius: 8px;
+  color: #c06080;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.designer-toggle-btn:hover {
+  background: #fdf0f5;
+}
 
 /* ── 챗봇 패널 ───────────────────────────────── */
 .chat-window {

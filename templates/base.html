@@ -96,6 +96,12 @@
     <span style="font-size:10px;color:#ccc">© My Mini Co-di</span>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    if (typeof marked !== "undefined") {
+      marked.setOptions({ breaks: true, gfm: true });
+    }
+  </script>
   <script src="{{ url_for('static', filename='js/main.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>

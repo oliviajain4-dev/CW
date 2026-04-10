@@ -62,9 +62,9 @@
            data-category="{{ item['category'] }}"
            ondragstart="onDragStart(event, {{ item['id'] }}, '{{ item['category'] }}')">
         {% if item['image_path'] %}
-        <img src="{{ url_for('static', filename=item['image_path'].replace('static/', '')) }}"
+        <img src="{{ url_for('static', filename=item['image_path'].replace('\\', '/').replace('static/', '')) }}"
              alt="{{ item['item_type'] }}"
-             onerror="this.src='data:image/svg+xml,<svg/>'">
+             onerror="this.style.display='none'">
         {% else %}
         <div class="no-image">👚</div>
         {% endif %}

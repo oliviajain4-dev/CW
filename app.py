@@ -16,6 +16,7 @@ app.py — 내 옷장의 코디 Flask 웹 대시보드
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 import os
 import json
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
@@ -34,6 +35,10 @@ ALLOWED_EXT   = {"jpg", "jpeg", "png"}
 PROFILE_PATH  = "user_profile.json"    # SQLite 환경용 폴백
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+# ── 추천 캐시 (날씨 3시간 주기 → 30분 캐시로 충분) ──────────────
+_recommend_cache: dict = {}
+_CACHE_TTL = 1800  # 30분(초)
 
 
 # ── 유틸 ──────────────────────────────────────────────────────────
@@ -135,64 +140,16 @@ def save_profile_data(data: dict) -> str:
 # ── 라우트 ────────────────────────────────────────────────────────
 @app.route("/")
 def dashboard():
+    """날씨·AI 호출 없이 즉시 반환 — 무거운 데이터는 JS가 /api/recommend 비동기 fetch"""
     profile = load_profile()
-
-    weather_chatbot = None
-    style_rec       = None
-    layering        = None
-    ai_comment      = None
-    style_log_id    = None
-
-    try:
-        from chatbot.weather_client import get_weather as get_weather_chatbot
-        from chatbot.weather_style_mapper import get_style_recommendation, get_layering_recommendation
-        from chatbot.llm_client import get_outfit_comment
-
-        sensitivity = int(profile.get("sensitivity", 3))
-        tpo         = profile.get("tpo", "일상")
-        nx          = int(profile.get("location_nx") or profile.get("nx") or 62)
-        ny          = int(profile.get("location_ny") or profile.get("ny") or 123)
-
-        weather_chatbot = get_weather_chatbot(nx=nx, ny=ny)
-        style_rec = get_style_recommendation(
-            weather_chatbot["morning"]["feels_like"],
-            weather_chatbot["morning"]["reh"],
-            weather_chatbot["morning"]["sky"],
-            weather_chatbot["morning"]["pty"],
-            sensitivity
-        )
-        layering   = get_layering_recommendation(weather_chatbot, sensitivity)
-        ai_comment = get_outfit_comment(
-            weather_chatbot, style_rec, layering, tpo,
-            profile if profile else None
-        )
-
-        # 추천 결과 DB 저장 (누적)
-        user_id = profile.get("id")
-        style_log_id = save_style_log(
-            user_id, weather_chatbot, style_rec, layering, ai_comment, tpo
-        )
-
-    except Exception as e:
-        ai_comment = f"(날씨/AI 연결 오류: {e})"
-
-    # 옷장 아이템
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
             "SELECT * FROM wardrobe_items ORDER BY created_at DESC"
-            if is_postgres() else
-            "SELECT * FROM wardrobe_items ORDER BY created_at DESC"
         )
-
     return render_template("dashboard.html",
         profile=profile,
-        weather=weather_chatbot,
-        style_rec=style_rec,
-        layering=layering,
-        ai_comment=ai_comment,
         wardrobe_items=wardrobe_items,
-        style_log_id=style_log_id,
         db_engine=db_engine(),
         now=datetime.now()
     )
@@ -253,7 +210,7 @@ def wardrobe_add():
         filename  = secure_filename(file.filename)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_")
         filename  = timestamp + filename
-        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+        save_path = os.path.join(app.config["UPLOAD_FOLDER"], filename).replace("\\", "/")
         file.save(save_path)
 
         try:
@@ -366,6 +323,14 @@ def api_weather():
         return jsonify({"error": str(e)}), 500
 
 
+# 날씨 온도 구간별 상의 최소 보온도 / 아우터 필요 여부
+_TOP_WARMTH_MIN = {
+    "freezing": 2, "very_cold": 1, "cold": 1, "cool": 0,
+    "mild": 0, "warm": 0, "hot": 0, "very_hot": 0,
+}
+_NEEDS_OUTER = {"freezing", "very_cold", "cold", "cool"}
+
+
 @app.route("/api/recommend")
 def api_recommend():
     profile = load_profile()
@@ -379,20 +344,114 @@ def api_recommend():
         nx = int(profile.get("location_nx") or profile.get("nx") or 62)
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
+        # 옷장 먼저 조회 — AI 프롬프트 + 캐시 키 + 이미지 매칭에 모두 사용
+        with get_db() as conn:
+            all_items = fetchall(
+                conn,
+                "SELECT id, category, item_type, warmth, texture, image_path "
+                "FROM wardrobe_items ORDER BY created_at DESC"
+            )
+
+        # 캐시 키에 옷장 수 포함 → 옷 추가/삭제 시 자동 무효화
+        cache_key = f"{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
+        cached = _recommend_cache.get(cache_key)
+        if cached and time.time() - cached["ts"] < _CACHE_TTL:
+            return jsonify(cached["data"])
+
         weather   = get_weather(nx=nx, ny=ny)
         style_rec = get_style_recommendation(
             weather["morning"]["feels_like"], weather["morning"]["reh"],
             weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
         )
         layering  = get_layering_recommendation(weather, sensitivity)
-        comment   = get_outfit_comment(weather, style_rec, layering, tpo, profile or None)
 
-        return jsonify({
-            "weather":   weather,
-            "style_rec": style_rec,
-            "layering":  layering,
-            "comment":   comment,
-        })
+        # AI에게 실제 옷장 + 트렌드 뉴스 전달
+        wardrobe_for_ai = [
+            {"category": it["category"], "item_type": it["item_type"],
+             "warmth": it.get("warmth", 0), "texture": it.get("texture", "미상")}
+            for it in all_items
+        ]
+        from chatbot.shopping import get_fashion_news
+        trend_news = get_fashion_news((profile or {}).get("style_pref", "캐주얼"))
+
+        outfit_result = get_outfit_comment(
+            weather, style_rec, layering, tpo,
+            profile or None, wardrobe_for_ai, trend_news
+        )
+        comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
+        bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
+
+        # 스타일 로그 DB 저장
+        user_id = profile.get("id")
+        save_style_log(user_id, weather, style_rec, layering, comment, tpo)
+
+        # ── 날씨에 맞는 옷장 이미지 매칭 (패널 표시용) ────────────
+        temp_range  = style_rec.get("temp_range", "mild")
+        top_min     = _TOP_WARMTH_MIN.get(temp_range, 0)
+        needs_outer = temp_range in _NEEDS_OUTER
+
+        wardrobe_matches = {"상의": [], "하의": [], "아우터": []}
+        for item in all_items:
+            cat      = item.get("category")
+            img_path = item.get("image_path", "")
+            if cat not in wardrobe_matches or not img_path:
+                continue
+            img_url = "/" + img_path.replace("\\", "/").lstrip("/")
+            entry   = {"id": item["id"], "item_type": item["item_type"],
+                       "warmth": item.get("warmth", 0), "image_url": img_url}
+            warmth  = item.get("warmth", 0)
+            if cat == "아우터" and needs_outer:
+                wardrobe_matches["아우터"].append(entry)
+            elif cat == "상의" and warmth >= top_min:
+                wardrobe_matches["상의"].append(entry)
+            elif cat == "하의":
+                wardrobe_matches["하의"].append(entry)
+        for cat in wardrobe_matches:
+            wardrobe_matches[cat] = wardrobe_matches[cat][:3]
+
+        result = {
+            "weather":          weather,
+            "style_rec":        style_rec,
+            "layering":         layering,
+            "comment":          comment,
+            "bubbles":          bubbles,
+            "wardrobe_matches": wardrobe_matches,
+        }
+        _recommend_cache[cache_key] = {"data": result, "ts": time.time()}
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/shopping")
+def api_shopping():
+    """옷장 분석 → AI 쇼핑 필요 목록 → 네이버 상품 (or 무신사 fallback)"""
+    profile = load_profile()
+    try:
+        from chatbot.shopping import get_shopping_cards
+        from chatbot.weather_client import get_weather
+        from chatbot.weather_style_mapper import get_style_recommendation
+
+        sensitivity = int(profile.get("sensitivity", 3))
+        nx = int(profile.get("location_nx") or profile.get("nx") or 62)
+        ny = int(profile.get("location_ny") or profile.get("ny") or 123)
+
+        with get_db() as conn:
+            all_items = fetchall(
+                conn,
+                "SELECT category, item_type, warmth, texture FROM wardrobe_items ORDER BY created_at DESC"
+            )
+
+        weather   = get_weather(nx=nx, ny=ny)
+        style_rec = get_style_recommendation(
+            weather["morning"]["feels_like"], weather["morning"]["reh"],
+            weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
+        )
+
+        from chatbot.shopping import get_fashion_news
+        trend_news = get_fashion_news((profile or {}).get("style_pref", "캐주얼"))
+        cards = get_shopping_cards(all_items, style_rec, profile or None, trend_news)
+        return jsonify({"cards": cards})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
