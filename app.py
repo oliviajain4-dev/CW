@@ -333,6 +333,11 @@ _TOP_WARMTH_MIN = {
 _NEEDS_OUTER = {"freezing", "very_cold", "cold", "cool"}
 
 
+@app.route("/fashion-show")
+def fashion_show():
+    return render_template("fashion_show.html")
+
+
 @app.route("/api/recommend")
 def api_recommend():
     profile = load_profile()

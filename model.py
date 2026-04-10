@@ -6,11 +6,29 @@ model.py — 이미지 분석 핵심 모듈
 - 카테고리 기반 두께/질감 추론
 """
 
-import torch
-import open_clip
 import os
-import numpy as np
-from PIL import Image
+
+try:
+    from PIL import Image
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+    print("PIL 없음 → AI 분석 비활성화 (pip install pillow)")
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    print("numpy 없음 (pip install numpy)")
+
+try:
+    import torch
+    import open_clip
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    print("torch/open_clip 없음 → AI 분석 비활성화 (pip install torch open_clip_torch)")
 
 # rembg 설치 필요: pip install rembg
 try:
@@ -21,11 +39,14 @@ except ImportError:
     print("rembg 없음 → 배경제거 스킵 (pip install rembg)")
 
 # ── 모델 로드 ───────────────────────────────────
-model, _, preprocess = open_clip.create_model_and_transforms(
-    'hf-hub:Marqo/marqo-fashionSigLIP'
-)
-tokenizer = open_clip.get_tokenizer('hf-hub:Marqo/marqo-fashionSigLIP')
-model.eval()
+if TORCH_AVAILABLE:
+    model, _, preprocess = open_clip.create_model_and_transforms(
+        'hf-hub:Marqo/marqo-fashionSigLIP'
+    )
+    tokenizer = open_clip.get_tokenizer('hf-hub:Marqo/marqo-fashionSigLIP')
+    model.eval()
+else:
+    model = preprocess = tokenizer = None
 
 # ── 텍스트 임베딩 사전 캐시 (라벨은 고정이므로 한 번만 계산) ──
 _text_features_cache = {}
@@ -119,6 +140,10 @@ def analyze_outfit(image_path, remove_bg=True):
         "총_보온도": 9   ← warmth 합산 (날씨 연동할 때 활용)
     }
     """
+    if not TORCH_AVAILABLE or not PIL_AVAILABLE:
+        fallback = {"item": "분석불가", "thickness": "알수없음", "warmth": 0, "texture": "unknown"}
+        return {"상의": fallback, "하의": fallback, "아우터": fallback, "총_보온도": 0}
+
     image = preprocess_image(image_path, remove_bg=remove_bg)
     tensor = preprocess(image).unsqueeze(0)
     result = {}
