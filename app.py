@@ -36,7 +36,9 @@ PROFILE_PATH  = "user_profile.json"    # SQLite 환경용 폴백
 
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# ── 추천 캐시 (날씨 3시간 주기 → 30분 캐시로 충분) ──────────────
+# ── 날씨/AI 추천 캐시 (30분) ──────────────────────
+_dashboard_cache = {"data": None, "ts": 0}
+CACHE_TTL = 30 * 60  # 30분
 _recommend_cache: dict = {}
 _CACHE_TTL = 1800  # 30분(초)
 

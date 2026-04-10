@@ -27,6 +27,9 @@ model, _, preprocess = open_clip.create_model_and_transforms(
 tokenizer = open_clip.get_tokenizer('hf-hub:Marqo/marqo-fashionSigLIP')
 model.eval()
 
+# ── 텍스트 임베딩 사전 캐시 (라벨은 고정이므로 한 번만 계산) ──
+_text_features_cache = {}
+
 # ── 라벨 정의 ───────────────────────────────────
 top_labels = [
     "t-shirt", "blouse", "shirt", "hoodie", "knit sweater",
@@ -123,14 +126,20 @@ def analyze_outfit(image_path, remove_bg=True):
 
     with torch.no_grad():
         image_features = model.encode_image(tensor)
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        # 각 카테고리별 최고 확률과 예측 수집
+        # 각 카테고리별 최고 확률과 예측 수집 (텍스트 임베딩 캐시 활용)
         category_scores = {}
         for part, labels in [("상의", top_labels),
                               ("하의", bottom_labels),
                               ("아우터", outer_labels)]:
-            text  = tokenizer(labels)
-            feats = model.encode_text(text)
+            cache_key = part
+            if cache_key not in _text_features_cache:
+                text  = tokenizer(labels)
+                feats = model.encode_text(text)
+                feats = feats / feats.norm(dim=-1, keepdim=True)
+                _text_features_cache[cache_key] = feats
+            feats = _text_features_cache[cache_key]
             probs = (image_features @ feats.T).softmax(dim=-1)
             pred  = labels[probs.argmax()]
             prob  = probs.max().item()

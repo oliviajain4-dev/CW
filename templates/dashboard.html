@@ -30,6 +30,9 @@
 
 <!-- 중앙 캐릭터 -->
 <div class="character-area">
+  <!-- 바닥 그림자 — character-figure 바깥에서 독립 애니메이션 -->
+  <div class="char-shadow"></div>
+
   <div class="character-figure">
     <div class="char-bubble">
       {% if profile.get('name') %}{{ profile['name'] }}님, 오늘도 예쁘게!{% else %}오늘 코디 골라볼까요?{% endif %}
@@ -67,7 +70,6 @@
       <div class="char-shoe"></div>
       <div class="char-shoe"></div>
     </div>
-    <div class="char-shadow"></div>
   </div>
 </div>
 
