@@ -275,43 +275,44 @@ def wardrobe_add():
         file.save(local_path)
 
         try:
+            # 1) AI 분석 먼저 — 실패 시 예외 발생 → 로컬 파일만 삭제하고 skip
             from model import analyze_outfit
             result = analyze_outfit(local_path)
 
-            # Cloudinary 업로드 (성공 시 URL, 실패 시 로컬 경로)
+            # 2) 분석 성공 후 Cloudinary 업로드
             save_path = upload_image(local_path)
 
-            # 분석 결과에서 저장할 카테고리 하나만 추출 (best_main 로직)
-            best_category = None
-            best_item = None
-            for category in ["아우터", "상의", "하의"]:
-                info = result[category]
-                if info["item"] not in ("없음", "분석불가"):
-                    best_category = category
-                    best_item = info
-                    break
+            # 3) 결과에서 카테고리/아이템 추출 (model이 하나만 반환)
+            category = next((k for k in ["아우터", "원피스", "상의", "하의"] if k in result), None)
+            if category is None:
+                raise ValueError("분석 결과에 카테고리가 없습니다.")
 
-            if best_category and best_item:
-                save_category = "원피스" if best_item["item"] == "dress" else best_category
-                with get_db() as conn:
-                    if is_postgres():
-                        execute(conn, """
-                            INSERT INTO wardrobe_items
-                                (user_id, image_path, category, item_type, warmth, texture, created_at)
-                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                        """, (user_id, save_path, save_category, best_item["item"],
-                              best_item["warmth"], best_item["texture"]))
-                    else:
-                        execute(conn, """
-                            INSERT INTO wardrobe_items
-                                (user_id, image_path, category, item_type, warmth, texture, created_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (user_id, save_path, save_category, best_item["item"],
-                              best_item["warmth"], best_item["texture"], datetime.now().isoformat()))
+            item_info    = result[category]  # type: ignore[index]
+            item_name    = str(item_info["item"])    # type: ignore[index]
+            item_warmth  = int(item_info["warmth"])  # type: ignore[index]
+            item_texture = str(item_info["texture"]) # type: ignore[index]
+
+            with get_db() as conn:
+                if is_postgres():
+                    execute(conn, """
+                        INSERT INTO wardrobe_items
+                            (user_id, image_path, category, item_type, warmth, texture, created_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    """, (user_id, save_path, category, item_name, item_warmth, item_texture))
+                else:
+                    execute(conn, """
+                        INSERT INTO wardrobe_items
+                            (user_id, image_path, category, item_type, warmth, texture, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (user_id, save_path, category, item_name, item_warmth, item_texture,
+                          datetime.now().isoformat()))
         except Exception as e:
             import traceback
             traceback.print_exc()
-            errors.append(f"{file.filename}: {e}")
+            # 분석 실패 시 로컬 임시 파일 삭제
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            errors.append(f"{file.filename}: AI 분석 실패 — {e}")
 
     if errors:
         flash("일부 이미지 분석 오류: " + " / ".join(errors), "error")
