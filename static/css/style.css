@@ -86,6 +86,35 @@ body {
   box-shadow: 0 2px 12px rgba(135,206,235,0.35);
 }
 .nav-right { display: flex; align-items: center; gap: 8px; }
+.nav-user-info {
+  display: flex; align-items: center; gap: 7px;
+  padding: 3px 10px 3px 3px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 20px;
+  margin-left: 4px;
+}
+.nav-avatar {
+  width: 28px; height: 28px; border-radius: 50%; object-fit: cover;
+  border: 1.5px solid rgba(255,255,255,0.6);
+}
+.nav-avatar-placeholder {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: linear-gradient(135deg,#7c4dff,#c51162);
+  color: #fff; font-size: 0.75rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.nav-username {
+  font-size: 0.78rem; font-weight: 600;
+  color: rgba(255,255,255,0.95);
+  max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nav-logout-btn {
+  font-size: 1rem; color: rgba(255,255,255,0.7);
+  text-decoration: none; padding: 0 2px; line-height: 1;
+  transition: color 0.15s;
+}
+.nav-logout-btn:hover { color: #fff; }
 .nav-icon-btn {
   width: 36px; height: 36px;
   border: 1px solid rgba(255,255,255,0.4);

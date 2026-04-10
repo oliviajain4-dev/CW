@@ -20,6 +20,11 @@ import time
 from datetime import datetime
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import (
+    LoginManager, UserMixin,
+    login_user, logout_user, login_required, current_user,
+)
 
 # db.py: PostgreSQL(Docker) 또는 SQLite(로컬) 자동 선택
 from db import get_db, fetchall, fetchone, execute, executereturning, \
@@ -29,6 +34,49 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(24))
+
+# ── Flask-Login 설정 ───────────────────────────────────────────────
+login_manager = LoginManager(app)
+login_manager.login_view    = "login_page"   # 미로그인 시 리다이렉트
+login_manager.login_message = None           # 기본 경고 메시지 숨김
+
+
+class User(UserMixin):
+    """Flask-Login에서 사용하는 사용자 모델."""
+    def __init__(self, row: dict):
+        self.id         = str(row["id"])
+        self.name       = row.get("name") or ""
+        self.email      = row.get("email") or ""
+        self.avatar_url = row.get("avatar_url") or ""
+
+    @staticmethod
+    def get(user_id: str):
+        try:
+            with get_db() as conn:
+                ph  = "%s" if is_postgres() else "?"
+                row = fetchone(conn, f"SELECT * FROM users WHERE id={ph}", (user_id,))
+                return User(row) if row else None
+        except Exception:
+            return None
+
+
+@login_manager.user_loader
+def load_user(user_id: str):
+    return User.get(user_id)
+
+
+# ── Google OAuth 설정 ──────────────────────────────────────────────
+_GOOGLE_ENABLED = bool(os.getenv("GOOGLE_CLIENT_ID"))
+if _GOOGLE_ENABLED:
+    from authlib.integrations.flask_client import OAuth
+    _oauth = OAuth(app)
+    _google = _oauth.register(
+        name="google",
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
 
 UPLOAD_FOLDER = "static/uploads"
 ALLOWED_EXT   = {"jpg", "jpeg", "png"}
@@ -62,15 +110,22 @@ if _CLOUDINARY_ENABLED:
     )
 
 
-def upload_image(file_path: str) -> str:
-    """로컬 파일을 Cloudinary에 업로드하고 URL 반환. 실패 시 로컬 경로 반환."""
+def upload_image(file_path: str, user_id=None, subfolder: str = "wardrobe") -> str:
+    """로컬 파일을 Cloudinary에 업로드하고 URL 반환. 실패 시 로컬 경로 반환.
+
+    Cloudinary 폴더 구조:
+      cw_app/user_{user_id}/wardrobe/  ← 옷장 이미지
+      cw_app/user_{user_id}/profile/   ← 프로필 사진
+    """
     if not _CLOUDINARY_ENABLED:
         return file_path
+    folder = f"cw_app/user_{user_id}/{subfolder}" if user_id else f"cw_app/shared/{subfolder}"
     try:
         result = cloudinary.uploader.upload(
             file_path,
-            folder="codi_wardrobe",
+            folder=folder,
             resource_type="image",
+            overwrite=False,
         )
         return result["secure_url"]
     except Exception as e:
@@ -78,16 +133,31 @@ def upload_image(file_path: str) -> str:
         return file_path
 
 
+def _cloudinary_public_id(url: str) -> str:
+    """Cloudinary URL에서 public_id를 추출한다.
+
+    예) https://res.cloudinary.com/demo/image/upload/v123/cw_app/user_1/wardrobe/file.jpg
+        → cw_app/user_1/wardrobe/file
+    """
+    try:
+        after_upload = url.split("/upload/", 1)[1]
+        # v{숫자}/ 버전 prefix 제거
+        if after_upload.startswith("v") and "/" in after_upload:
+            _, after_upload = after_upload.split("/", 1)
+        return after_upload.rsplit(".", 1)[0]
+    except Exception:
+        # fallback: 끝에서 두 세그먼트만 (이전 방식)
+        parts = url.split("/")
+        return "/".join(parts[-2:]).rsplit(".", 1)[0]
+
+
 def delete_image(image_path: str) -> None:
     """Cloudinary URL이면 Cloudinary에서 삭제, 로컬 경로면 파일 삭제."""
     if not image_path:
         return
     if image_path.startswith("http"):
-        # Cloudinary URL에서 public_id 추출 (folder/filename 형식)
         try:
-            parts = image_path.split("/")
-            # .../codi_wardrobe/filename.jpg → codi_wardrobe/filename (확장자 제거)
-            public_id = "/".join(parts[-2:]).rsplit(".", 1)[0]
+            public_id = _cloudinary_public_id(image_path)
             cloudinary.uploader.destroy(public_id)
         except Exception as e:
             print(f"Cloudinary 삭제 실패: {e}")
@@ -108,10 +178,23 @@ def allowed_file(filename):
 
 
 def init_db():
-    """SQLite 환경에서만 테이블 생성 (PostgreSQL은 init.sql로 처리)"""
+    """테이블 생성 및 기존 DB 컬럼 마이그레이션."""
     if is_postgres():
-        print(f"[DB] {db_engine()} 연결됨")
+        with get_db() as conn:
+            for col, definition in [
+                ("email",         "VARCHAR(200)"),
+                ("password_hash", "TEXT"),
+                ("google_id",     "TEXT"),
+                ("avatar_url",    "TEXT"),
+            ]:
+                execute(conn, f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {definition}")
+            # google_id, email UNIQUE 인덱스 (이미 있으면 무시)
+            execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_email_uidx    ON users(email)     WHERE email IS NOT NULL")
+            execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_uidx ON users(google_id) WHERE google_id IS NOT NULL")
+        print(f"[DB] {db_engine()} 연결됨 (마이그레이션 완료)")
         return
+
+    # SQLite 폴백
     with get_db() as conn:
         execute(conn, """
             CREATE TABLE IF NOT EXISTS wardrobe_items (
@@ -127,11 +210,16 @@ def init_db():
         """)
         execute(conn, """
             CREATE TABLE IF NOT EXISTS users (
-                id          TEXT PRIMARY KEY,
-                name        TEXT, gender TEXT, height INTEGER, weight INTEGER,
-                body_type   TEXT, style_pref TEXT, sensitivity INTEGER DEFAULT 3,
+                id            TEXT PRIMARY KEY,
+                email         TEXT UNIQUE,
+                password_hash TEXT,
+                google_id     TEXT UNIQUE,
+                avatar_url    TEXT,
+                name          TEXT, gender TEXT, height INTEGER, weight INTEGER,
+                body_type     TEXT, style_pref TEXT, sensitivity INTEGER DEFAULT 3,
                 tpo TEXT DEFAULT '일상', location_nx INTEGER DEFAULT 62,
-                location_ny INTEGER DEFAULT 123, created_at TEXT, updated_at TEXT
+                location_ny   INTEGER DEFAULT 123,
+                created_at TEXT, updated_at TEXT
             )
         """)
     print(f"[DB] {db_engine()} 초기화 완료")
@@ -139,14 +227,12 @@ def init_db():
 
 # ── 사용자 프로필 로드/저장 ────────────────────────────────────────
 def load_profile(user_id=None) -> dict:
+    uid = user_id or (current_user.id if current_user.is_authenticated else None)
+    if not uid:
+        return {}
     if is_postgres():
-        if not user_id:
-            # 임시: 첫 번째 사용자 로드 (나중에 로그인 기능으로 대체)
-            with get_db() as conn:
-                row = fetchone(conn, "SELECT * FROM users LIMIT 1")
-                return dict(row) if row else {}
         with get_db() as conn:
-            row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (user_id,))
+            row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (uid,))
             return dict(row) if row else {}
     else:
         if os.path.exists(PROFILE_PATH):
@@ -155,58 +241,191 @@ def load_profile(user_id=None) -> dict:
         return {}
 
 
+def _save_avatar(user_id: str, avatar_url: str) -> None:
+    """프로필 사진 URL을 users 테이블에 저장."""
+    if not user_id or user_id == "local":
+        return
+    ph = "%s" if is_postgres() else "?"
+    with get_db() as conn:
+        execute(conn, f"UPDATE users SET avatar_url={ph} WHERE id={ph}", (avatar_url, user_id))
+
+
 def save_profile_data(data: dict) -> str:
-    if is_postgres():
+    uid = current_user.id if current_user.is_authenticated else None
+    if is_postgres() and uid:
         with get_db() as conn:
-            existing = fetchone(conn, "SELECT id FROM users LIMIT 1")
-            if existing:
-                user_id = existing["id"]
-                execute(conn, """
-                    UPDATE users SET
-                        name=%s, gender=%s, height=%s, weight=%s,
-                        body_type=%s, style_pref=%s, sensitivity=%s,
-                        tpo=%s, location_nx=%s, location_ny=%s
-                    WHERE id=%s
-                """, (
-                    data["name"], data["gender"],
-                    int(data["height"]) if data["height"] else None,
-                    int(data["weight"]) if data["weight"] else None,
-                    data["body_type"], data["style_pref"],
-                    int(data["sensitivity"]), data["tpo"],
-                    int(data["nx"]), int(data["ny"]),
-                    user_id
-                ))
-            else:
-                user_id = executereturning(conn, """
-                    INSERT INTO users
-                        (name, gender, height, weight, body_type, style_pref,
-                         sensitivity, tpo, location_nx, location_ny)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                    RETURNING id
-                """, (
-                    data["name"], data["gender"],
-                    int(data["height"]) if data["height"] else None,
-                    int(data["weight"]) if data["weight"] else None,
-                    data["body_type"], data["style_pref"],
-                    int(data["sensitivity"]), data["tpo"],
-                    int(data["nx"]), int(data["ny"])
-                ))
-        return str(user_id)
+            execute(conn, """
+                UPDATE users SET
+                    name=%s, gender=%s, height=%s, weight=%s,
+                    body_type=%s, style_pref=%s, sensitivity=%s,
+                    tpo=%s, location_nx=%s, location_ny=%s
+                WHERE id=%s
+            """, (
+                data["name"], data["gender"],
+                int(data["height"]) if data["height"] else None,
+                int(data["weight"]) if data["weight"] else None,
+                data["body_type"], data["style_pref"],
+                int(data["sensitivity"]), data["tpo"],
+                int(data["nx"]), int(data["ny"]),
+                uid,
+            ))
+        return uid
     else:
         with open(PROFILE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return "local"
 
 
+# ══════════════════════════════════════════════════════════════════
+# ── 인증 라우트 ───────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    if current_user.is_authenticated:
+        return redirect(url_for("dashboard"))
+    return render_template("login.html", active_tab="login")
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    email    = request.form.get("email", "").strip().lower()
+    password = request.form.get("password", "")
+
+    if not email or not password:
+        flash("이메일과 비밀번호를 입력해주세요.", "error")
+        return render_template("login.html", active_tab="login")
+
+    ph = "%s" if is_postgres() else "?"
+    with get_db() as conn:
+        row = fetchone(conn, f"SELECT * FROM users WHERE email={ph}", (email,))
+
+    if not row or not row.get("password_hash"):
+        flash("이메일 또는 비밀번호가 올바르지 않습니다.", "error")
+        return render_template("login.html", active_tab="login")
+
+    if not check_password_hash(row["password_hash"], password):
+        flash("이메일 또는 비밀번호가 올바르지 않습니다.", "error")
+        return render_template("login.html", active_tab="login")
+
+    login_user(User(row), remember=True)
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    name      = request.form.get("name", "").strip()
+    email     = request.form.get("email", "").strip().lower()
+    password  = request.form.get("password", "")
+    password2 = request.form.get("password2", "")
+
+    if not name or not email or not password:
+        flash("모든 항목을 입력해주세요.", "error")
+        return render_template("login.html", active_tab="signup")
+    if len(password) < 8:
+        flash("비밀번호는 8자 이상이어야 합니다.", "error")
+        return render_template("login.html", active_tab="signup")
+    if password != password2:
+        flash("비밀번호가 일치하지 않습니다.", "error")
+        return render_template("login.html", active_tab="signup")
+
+    ph = "%s" if is_postgres() else "?"
+    with get_db() as conn:
+        if fetchone(conn, f"SELECT id FROM users WHERE email={ph}", (email,)):
+            flash("이미 가입된 이메일입니다.", "error")
+            return render_template("login.html", active_tab="signup")
+
+        hashed = generate_password_hash(password)
+        if is_postgres():
+            user_id = executereturning(conn, """
+                INSERT INTO users (name, email, password_hash)
+                VALUES (%s, %s, %s) RETURNING id
+            """, (name, email, hashed))
+        else:
+            import uuid
+            user_id = str(uuid.uuid4())
+            execute(conn, """
+                INSERT INTO users (id, name, email, password_hash)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, name, email, hashed))
+
+        row = fetchone(conn, f"SELECT * FROM users WHERE id={ph}", (str(user_id),))
+
+    login_user(User(row), remember=True)
+    flash(f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
+    return redirect(url_for("profile"))
+
+
+@app.route("/auth/google")
+def auth_google():
+    if not _GOOGLE_ENABLED:
+        flash("Google 로그인이 설정되지 않았습니다. (.env에 GOOGLE_CLIENT_ID 추가 필요)", "error")
+        return redirect(url_for("login_page"))
+    redirect_uri = url_for("auth_google_callback", _external=True)
+    return _google.authorize_redirect(redirect_uri)
+
+
+@app.route("/auth/google/callback")
+def auth_google_callback():
+    if not _GOOGLE_ENABLED:
+        return redirect(url_for("login_page"))
+    try:
+        token     = _google.authorize_access_token()
+        user_info = token.get("userinfo") or {}
+        google_id = user_info.get("sub")
+        email     = (user_info.get("email") or "").lower()
+        name      = user_info.get("name") or email.split("@")[0]
+        picture   = user_info.get("picture")
+    except Exception as e:
+        flash(f"Google 로그인 오류: {e}", "error")
+        return redirect(url_for("login_page"))
+
+    with get_db() as conn:
+        # 1) google_id로 기존 계정 조회
+        row = fetchone(conn, "SELECT * FROM users WHERE google_id=%s", (google_id,))
+        if not row and email:
+            # 2) 같은 이메일로 가입된 계정이 있으면 google_id 연결
+            row = fetchone(conn, "SELECT * FROM users WHERE email=%s", (email,))
+            if row:
+                execute(conn, "UPDATE users SET google_id=%s, avatar_url=COALESCE(avatar_url,%s) WHERE id=%s",
+                        (google_id, picture, row["id"]))
+                row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (row["id"],))
+
+        if not row:
+            # 3) 신규 사용자 생성
+            user_id = executereturning(conn, """
+                INSERT INTO users (name, email, google_id, avatar_url)
+                VALUES (%s, %s, %s, %s) RETURNING id
+            """, (name, email, google_id, picture))
+            row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (str(user_id),))
+
+    login_user(User(row), remember=True)
+    # 프로필 미완성이면 프로필 페이지로
+    if not row.get("gender"):
+        flash(f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
+        return redirect(url_for("profile"))
+    return redirect(url_for("dashboard"))
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login_page"))
+
+
 # ── 라우트 ────────────────────────────────────────────────────────
 @app.route("/")
+@login_required
 def dashboard():
     """날씨·AI 호출 없이 즉시 반환 — 무거운 데이터는 JS가 /api/recommend 비동기 fetch"""
     profile = load_profile()
+    ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
-            "SELECT * FROM wardrobe_items ORDER BY created_at DESC"
+            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
+            (current_user.id,)
         )
     return render_template("dashboard.html",
         profile=profile,
@@ -217,6 +436,7 @@ def dashboard():
 
 
 @app.route("/profile", methods=["GET", "POST"])
+@login_required
 def profile():
     if request.method == "POST":
         data = {
@@ -231,7 +451,18 @@ def profile():
             "nx":          request.form.get("nx", "62"),
             "ny":          request.form.get("ny", "123"),
         }
-        save_profile_data(data)
+        user_id = save_profile_data(data)
+
+        # 프로필 사진 업로드 (선택)
+        avatar_file = request.files.get("avatar")
+        if avatar_file and avatar_file.filename and allowed_file(avatar_file.filename):
+            filename   = secure_filename(avatar_file.filename)
+            local_path = os.path.join(app.config["UPLOAD_FOLDER"], f"avatar_{user_id}_{filename}").replace("\\", "/")
+            avatar_file.save(local_path)
+            avatar_url = upload_image(local_path, user_id=user_id, subfolder="profile")
+            # DB에 avatar_url 저장
+            _save_avatar(user_id, avatar_url)
+
         return redirect(url_for("dashboard"))
 
     profile_data = load_profile()
@@ -239,11 +470,14 @@ def profile():
 
 
 @app.route("/wardrobe")
+@login_required
 def wardrobe():
+    ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         items = fetchall(
             conn,
-            "SELECT * FROM wardrobe_items ORDER BY category, created_at DESC"
+            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            (current_user.id,)
         )
     categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
     for item in items:
@@ -254,6 +488,7 @@ def wardrobe():
 
 
 @app.route("/wardrobe/add", methods=["POST"])
+@login_required
 def wardrobe_add():
     if "image" not in request.files:
         return redirect(url_for("wardrobe"))
@@ -279,8 +514,8 @@ def wardrobe_add():
             from model import analyze_outfit
             result = analyze_outfit(local_path)
 
-            # 2) 분석 성공 후 Cloudinary 업로드
-            save_path = upload_image(local_path)
+            # 2) 분석 성공 후 Cloudinary 업로드 (user별 폴더로 저장)
+            save_path = upload_image(local_path, user_id=user_id, subfolder="wardrobe")
 
             # 3) 결과에서 카테고리/아이템 추출 (model이 하나만 반환)
             category = next((k for k in ["아우터", "원피스", "상의", "하의"] if k in result), None)
@@ -321,6 +556,7 @@ def wardrobe_add():
 
 
 @app.route("/wardrobe/move/<int:item_id>", methods=["POST"])
+@login_required
 def wardrobe_move(item_id):
     """옷 카테고리 변경 (드래그&드롭)"""
     data = request.get_json()
@@ -334,6 +570,7 @@ def wardrobe_move(item_id):
 
 
 @app.route("/wardrobe/delete/<int:item_id>", methods=["POST"])
+@login_required
 def wardrobe_delete(item_id):
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
@@ -351,6 +588,7 @@ def wardrobe_delete(item_id):
 
 
 @app.route("/feedback/<int:log_id>", methods=["POST"])
+@login_required
 def feedback(log_id):
     """
     코디 피드백 저장 — 누적 데이터로 모델 개선
@@ -365,6 +603,7 @@ def feedback(log_id):
 
 
 @app.route("/chat", methods=["POST"])
+@login_required
 def chat():
     data    = request.get_json()
     message = data.get("message", "")
@@ -382,6 +621,7 @@ def chat():
 
 
 @app.route("/api/weather")
+@login_required
 def api_weather():
     profile = load_profile()
     try:
@@ -403,11 +643,13 @@ _NEEDS_OUTER = {"freezing", "very_cold", "cold", "cool"}
 
 
 @app.route("/fashion-show")
+@login_required
 def fashion_show():
     return render_template("fashion_show.html")
 
 
 @app.route("/api/recommend")
+@login_required
 def api_recommend():
     profile = load_profile()
     try:
@@ -500,6 +742,7 @@ def api_recommend():
 
 
 @app.route("/api/shopping")
+@login_required
 def api_shopping():
     """옷장 분석 → AI 쇼핑 필요 목록 → 네이버 상품 (or 무신사 fallback)"""
     profile = load_profile()
