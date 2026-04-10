@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>로그인 — My Mini Co-di</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: url('/static/images/room_bg.png') center/cover no-repeat;
+      background-color: #f0e6d2;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(28,15,74,0.55) 0%, rgba(90,30,80,0.40) 100%);
+      backdrop-filter: blur(2px);
+    }
+
+    /* ── 카드 ── */
+    .login-card {
+      position: relative;
+      width: 420px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(24px);
+      border-radius: 24px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.25), 0 0 0 1px rgba(255,255,255,0.6);
+      overflow: hidden;
+      padding: 40px 36px 36px;
+    }
+
+    /* ── 로고 ── */
+    .logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .logo-icon { font-size: 2.4rem; display: block; margin-bottom: 6px; }
+    .logo-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #1C0F4A;
+      letter-spacing: -0.3px;
+    }
+    .logo-sub {
+      font-size: 0.78rem;
+      color: #888;
+      margin-top: 4px;
+    }
+
+    /* ── 탭 ── */
+    .tabs {
+      display: flex;
+      background: #f4f4f6;
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 24px;
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 0;
+      border: none;
+      border-radius: 9px;
+      background: transparent;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #999;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .tab-btn.active {
+      background: #fff;
+      color: #1C0F4A;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+    }
+
+    /* ── Flash 메시지 ── */
+    .flash {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+    }
+    .flash.error { background: #fff0f0; color: #c0392b; border: 1px solid #f5c6c6; }
+    .flash.success { background: #f0fff4; color: #1e8449; border: 1px solid #b2dfdb; }
+
+    /* ── Google 버튼 ── */
+    .btn-google {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      padding: 11px 0;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      background: #fff;
+      color: #333;
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.18s, border-color 0.18s;
+      text-decoration: none;
+      font-family: inherit;
+    }
+    .btn-google:hover { background: #f7f7f7; border-color: #bbb; }
+    .btn-google svg { flex-shrink: 0; }
+
+    /* ── 구분선 ── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 18px 0;
+      color: #bbb;
+      font-size: 0.78rem;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e8e8e8;
+    }
+
+    /* ── 폼 ── */
+    .form-group { margin-bottom: 14px; }
+    .form-group label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 5px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 0.92rem;
+      font-family: inherit;
+      color: #222;
+      background: #fafafa;
+      transition: border-color 0.18s, background 0.18s;
+      outline: none;
+    }
+    .form-group input:focus {
+      border-color: #7c4dff;
+      background: #fff;
+    }
+
+    /* ── 제출 버튼 ── */
+    .btn-submit {
+      width: 100%;
+      padding: 12px 0;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #7c4dff 0%, #c51162 100%);
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.18s, transform 0.1s;
+      font-family: inherit;
+      margin-top: 4px;
+    }
+    .btn-submit:hover { opacity: 0.90; }
+    .btn-submit:active { transform: scale(0.98); }
+
+    /* ── 보조 텍스트 ── */
+    .helper-text {
+      text-align: center;
+      font-size: 0.78rem;
+      color: #aaa;
+      margin-top: 16px;
+    }
+
+    /* ── 패널 토글 ── */
+    .panel { display: none; }
+    .panel.active { display: block; }
+  </style>
+</head>
+<body>
+
+<div class="login-card">
+
+  <!-- 로고 -->
+  <div class="logo">
+    <span class="logo-icon">👗</span>
+    <div class="logo-title">My Mini Co-di</div>
+    <div class="logo-sub">내 옷장의 코디 — AI 스타일리스트</div>
+  </div>
+
+  <!-- Flash 메시지 -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- 탭 -->
+  <div class="tabs">
+    <button class="tab-btn active" id="tabLogin" onclick="switchTab('login')">로그인</button>
+    <button class="tab-btn" id="tabSignup" onclick="switchTab('signup')">회원가입</button>
+  </div>
+
+  <!-- ── 로그인 패널 ── -->
+  <div class="panel active" id="panelLogin">
+
+    <!-- Google 로그인 -->
+    <a href="{{ url_for('auth_google') }}" class="btn-google">
+      <svg width="18" height="18" viewBox="0 0 18 18">
+        <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+        <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+        <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+        <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+      </svg>
+      Google로 로그인
+    </a>
+
+    <div class="divider">또는 이메일로 로그인</div>
+
+    <form method="POST" action="{{ url_for('login') }}">
+      <div class="form-group">
+        <label>이메일</label>
+        <input type="email" name="email" placeholder="example@email.com" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" name="password" placeholder="비밀번호를 입력하세요" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-submit">로그인</button>
+    </form>
+
+    <p class="helper-text">계정이 없으신가요? <a href="#" onclick="switchTab('signup')" style="color:#7c4dff;font-weight:600;">회원가입</a></p>
+  </div>
+
+  <!-- ── 회원가입 패널 ── -->
+  <div class="panel" id="panelSignup">
+
+    <!-- Google 회원가입 -->
+    <a href="{{ url_for('auth_google') }}" class="btn-google">
+      <svg width="18" height="18" viewBox="0 0 18 18">
+        <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
+        <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/>
+        <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+        <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+      </svg>
+      Google로 시작하기
+    </a>
+
+    <div class="divider">또는 이메일로 가입</div>
+
+    <form method="POST" action="{{ url_for('signup') }}">
+      <div class="form-group">
+        <label>이름 (닉네임)</label>
+        <input type="text" name="name" placeholder="이름을 입력하세요" required autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label>이메일</label>
+        <input type="email" name="email" placeholder="example@email.com" required autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>비밀번호 <span style="color:#bbb;font-weight:400;">(8자 이상)</span></label>
+        <input type="password" name="password" placeholder="비밀번호를 입력하세요" required minlength="8" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label>비밀번호 확인</label>
+        <input type="password" name="password2" placeholder="비밀번호를 다시 입력하세요" required autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn-submit">회원가입</button>
+    </form>
+
+    <p class="helper-text">이미 계정이 있으신가요? <a href="#" onclick="switchTab('login')" style="color:#7c4dff;font-weight:600;">로그인</a></p>
+  </div>
+
+</div>
+
+<script>
+  function switchTab(tab) {
+    document.getElementById('panelLogin').classList.toggle('active', tab === 'login');
+    document.getElementById('panelSignup').classList.toggle('active', tab === 'signup');
+    document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+    document.getElementById('tabSignup').classList.toggle('active', tab === 'signup');
+  }
+
+  // Flash 메시지가 있고 signup 에러이면 signup 탭 열기
+  {% if active_tab == 'signup' %}
+  switchTab('signup');
+  {% endif %}
+</script>
+
+</body>
+</html>

@@ -12,19 +12,25 @@ CREATE EXTENSION IF NOT EXISTS "pg_trgm";    -- 텍스트 유사도 검색
 --    개인정보 + 스타일 선호도 저장
 -- ================================================================
 CREATE TABLE IF NOT EXISTS users (
-    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name         VARCHAR(50),
-    gender       VARCHAR(10),
-    height       SMALLINT,           -- cm
-    weight       SMALLINT,           -- kg
-    body_type    VARCHAR(20),        -- 슬림/보통/근육형/통통
-    style_pref   VARCHAR(30),        -- 캐주얼/스트릿/포멀/미니멀/페미닌
-    sensitivity  SMALLINT DEFAULT 3, -- 1(추위) ~ 5(더위)
-    tpo          VARCHAR(30) DEFAULT '일상',
-    location_nx  SMALLINT DEFAULT 62,
-    location_ny  SMALLINT DEFAULT 123,
-    created_at   TIMESTAMPTZ DEFAULT NOW(),
-    updated_at   TIMESTAMPTZ DEFAULT NOW()
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    -- 인증
+    email         VARCHAR(200) UNIQUE,
+    password_hash TEXT,
+    google_id     TEXT UNIQUE,
+    avatar_url    TEXT,
+    -- 프로필
+    name          VARCHAR(50),
+    gender        VARCHAR(10),
+    height        SMALLINT,           -- cm
+    weight        SMALLINT,           -- kg
+    body_type     VARCHAR(20),        -- 슬림/보통/근육형/통통
+    style_pref    VARCHAR(30),        -- 캐주얼/스트릿/포멀/미니멀/페미닌
+    sensitivity   SMALLINT DEFAULT 3, -- 1(추위) ~ 5(더위)
+    tpo           VARCHAR(30) DEFAULT '일상',
+    location_nx   SMALLINT DEFAULT 62,
+    location_ny   SMALLINT DEFAULT 123,
+    created_at    TIMESTAMPTZ DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ================================================================
@@ -144,7 +150,7 @@ CREATE OR REPLACE TRIGGER users_updated_at
 -- ================================================================
 -- 8. 기본 테스트 데이터 (선택)
 -- ================================================================
--- 개발 중 빠른 확인을 위한 임시 사용자 1명
-INSERT INTO users (name, gender, height, weight, body_type, style_pref, sensitivity, tpo)
-VALUES ('테스트유저', '여성', 165, 52, '보통', '캐주얼', 3, '일상')
-ON CONFLICT DO NOTHING;
+-- 초기 테스트 계정 (비밀번호: test1234 의 bcrypt hash — 실제 배포 전 삭제)
+-- INSERT INTO users (name, email, password_hash, gender, height, weight, body_type, style_pref)
+-- VALUES ('테스트유저', 'test@example.com', '...hash...', '여성', 165, 52, '보통', '캐주얼')
+-- ON CONFLICT DO NOTHING;

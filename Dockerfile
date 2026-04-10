@@ -17,23 +17,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python 의존성 설치 ─────────────────────────────
-# requirements를 먼저 복사 → 코드 변경 시 캐시 재사용
+# requirements.txt 먼저 복사 → 소스 변경 시 pip 캐시 재사용
 COPY requirements.txt .
 
-# open_clip / torch 는 용량이 매우 크므로 CPU-only 버전 설치
-# (GPU 필요시 docker-compose.yml에서 nvidia runtime 설정)
+# open_clip / torch 는 CPU-only 버전 사용
+# requirements.txt에 torch==...+cpu 로 명시되어 있으나 extra-index 가 필요
 RUN pip install --no-cache-dir \
-    flask \
-    psycopg2-binary \
-    python-dotenv \
-    requests \
-    anthropic \
-    pillow \
-    werkzeug \
-    transformers \
-    cloudinary
+    flask psycopg2-binary python-dotenv requests anthropic \
+    pillow werkzeug transformers cloudinary flask-login authlib
 
-# open_clip (Marqo FashionSigLIP 모델용)
+# torch CPU-only (용량 크므로 별도 레이어 — 캐시 최대 활용)
 RUN pip install --no-cache-dir open_clip_torch
 
 # ── 앱 소스 복사 ───────────────────────────────────
