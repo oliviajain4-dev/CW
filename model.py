@@ -58,7 +58,11 @@ top_labels = [
 ]
 bottom_labels = [
     "jeans", "slacks", "long skirt", "mini skirt", "pleated skirt",
-    "dress", "wide pants", "shorts", "midi skirt", "leggings"
+    "wide pants", "shorts", "midi skirt", "leggings"
+]
+dress_labels = [
+    "dress", "one-piece dress", "maxi dress", "midi dress",
+    "mini dress", "sundress", "shirt dress", "no dress"
 ]
 outer_labels = [
     "padding jacket", "coat", "jacket", "cardigan", "blazer",
@@ -141,71 +145,63 @@ def analyze_outfit(image_path, remove_bg=True):
     }
     """
     if not TORCH_AVAILABLE or not PIL_AVAILABLE:
-        fallback = {"item": "분석불가", "thickness": "알수없음", "warmth": 0, "texture": "unknown"}
-        return {"상의": fallback, "하의": fallback, "아우터": fallback, "총_보온도": 0}
+        raise RuntimeError("AI 분석 모듈(torch/PIL)이 설치되지 않았습니다.")
 
     image = preprocess_image(image_path, remove_bg=remove_bg)
-    tensor = preprocess(image).unsqueeze(0)
-    result = {}
+    tensor = preprocess(image).unsqueeze(0)  # type: ignore[operator]
+    result: dict = {}
     total_warmth = 0
 
-    with torch.no_grad():
-        image_features = model.encode_image(tensor)
+    with torch.no_grad():  # type: ignore[attr-defined]
+        image_features = model.encode_image(tensor)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        # 각 카테고리별 최고 확률과 예측 수집 (텍스트 임베딩 캐시 활용)
-        category_scores = {}
-        for part, labels in [("상의", top_labels),
-                              ("하의", bottom_labels),
-                              ("아우터", outer_labels)]:
-            cache_key = part
-            if cache_key not in _text_features_cache:
-                text  = tokenizer(labels)
-                feats = model.encode_text(text)
+        # ── 각 그룹별 최고 확률 예측 (텍스트 임베딩 캐시) ──
+        def get_score(part, labels):
+            if part not in _text_features_cache:
+                text  = tokenizer(labels)  # type: ignore[operator]
+                feats = model.encode_text(text)  # type: ignore[operator]
                 feats = feats / feats.norm(dim=-1, keepdim=True)
-                _text_features_cache[cache_key] = feats
-            feats = _text_features_cache[cache_key]
+                _text_features_cache[part] = feats
+            feats = _text_features_cache[part]
             probs = (image_features @ feats.T).softmax(dim=-1)
-            pred  = labels[probs.argmax()]
-            prob  = probs.max().item()
-            category_scores[part] = (pred, prob)
+            return labels[probs.argmax()], probs.max().item()
 
-        # ── 카테고리 결정 로직 ──────────────────────
-        outer_pred, outer_prob = category_scores["아우터"]
-        top_pred,   top_prob   = category_scores["상의"]
-        bottom_pred, bottom_prob = category_scores["하의"]
+        outer_pred, outer_prob   = get_score("아우터", outer_labels)
+        dress_pred, dress_prob   = get_score("원피스", dress_labels)
+        top_pred,   top_prob     = get_score("상의",   top_labels)
+        bottom_pred, bottom_prob = get_score("하의",   bottom_labels)
 
+        # ── 카테고리 결정 우선순위 ──────────────────
+        # 1순위: 아우터 (확률 > 0.5 이고 no outer 아님)
+        # 2순위: 원피스 (dress 계열 확률 > 0.6 이고 no dress 아님)
+        # 3순위: 상의/하의 중 확률 높은 것
         has_outer = (outer_pred != "no outer" and outer_prob > 0.5)
+        has_dress = (dress_pred != "no dress" and dress_prob > 0.6)
 
-        # 아우터가 감지됐으면 → 아우터 사진이므로 상의/하의는 저장 안 함
-        # 아우터가 없으면 → 상의/하의 중 확률 높은 것 하나만 저장
         if has_outer:
-            best_main = None  # 아우터 사진 → 상의/하의 모두 없음
+            final_category = "아우터"
+            final_item     = outer_pred
+        elif has_dress:
+            final_category = "원피스"
+            final_item     = dress_pred
+        elif top_prob >= bottom_prob:
+            final_category = "상의"
+            final_item     = top_pred
         else:
-            best_main = "상의" if top_prob >= bottom_prob else "하의"
+            final_category = "하의"
+            final_item     = bottom_pred
 
-        for part, labels in [("상의", top_labels), ("하의", bottom_labels), ("아우터", outer_labels)]:
-            pred, prob = category_scores[part]
+        info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
+        result[final_category] = {
+            "item":      final_item,
+            "thickness": info["thickness"],
+            "warmth":    info["warmth"],
+            "texture":   info["texture"],
+        }
+        total_warmth = info["warmth"]
 
-            if part == "아우터":
-                item = pred if has_outer else "없음"
-            elif best_main is None:
-                item = "없음"   # 아우터 사진 → 상의/하의 없음
-            elif part == best_main:
-                item = pred
-            else:
-                item = "없음"
-
-            info = THICKNESS_MAP.get(item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
-            result[part] = {
-                "item":      item,
-                "thickness": info["thickness"],
-                "warmth":    info["warmth"],
-                "texture":   info["texture"],
-            }
-            total_warmth += info["warmth"]
-
-    result["총_보온도"] = total_warmth  # 낮을수록 여름옷, 높을수록 겨울옷
+    result["총_보온도"] = total_warmth
     return result
 
 # ── 보온도 기반 계절 추론 ────────────────────────

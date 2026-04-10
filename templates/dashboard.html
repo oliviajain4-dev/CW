@@ -136,10 +136,10 @@
            title="{{ item['item_type'] }}"
            data-id="{{ item['id'] }}"
            data-category="{{ item['category'] }}"
-           {% if item['image_path'] %}data-src="{{ url_for('static', filename=item['image_path'].replace('\\', '/').replace('static/', '')) }}"{% endif %}
+           {% if item['image_path'] %}data-src="{{ item['image_path'] | img_url }}"{% endif %}
            onclick="wearItem(this)">
         {% if item['image_path'] %}
-        <img src="{{ url_for('static', filename=item['image_path'].replace('\\', '/').replace('static/', '')) }}"
+        <img src="{{ item['image_path'] | img_url }}"
              alt="{{ item['item_type'] }}"
              onerror="this.parentElement.innerHTML='<span class=\'no-img\'>👚</span>'">
         {% else %}<span class="no-img">👚</span>{% endif %}
