@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>코디 음성 채팅</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;
+      background: #0f0f13;
+      color: #e8e8f0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── 헤더 ── */
+    header {
+      width: 100%;
+      max-width: 480px;
+      padding: 20px 24px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    header h1 { font-size: 17px; font-weight: 600; color: #fff; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #555; flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .status-dot.connected  { background: #4caf50; }
+    .status-dot.recording  { background: #f44336; animation: blink 1s infinite; }
+    .status-dot.processing { background: #ff9800; }
+    .status-dot.playing    { background: #2196f3; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── 채팅 영역 ── */
+    #chat {
+      width: 100%;
+      max-width: 480px;
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .bubble {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.55;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
+    .bubble.user {
+      align-self: flex-end;
+      background: #3a3a5c;
+      color: #e8e8f0;
+      border-bottom-right-radius: 4px;
+    }
+    .bubble.assistant {
+      align-self: flex-start;
+      background: #1e1e2e;
+      color: #c9d1e8;
+      border-bottom-left-radius: 4px;
+      border: 1px solid #2a2a40;
+    }
+    .bubble.error {
+      align-self: center;
+      background: #3b1a1a;
+      color: #ff8a8a;
+      font-size: 13px;
+    }
+
+    /* ── 컨트롤 영역 ── */
+    #controls {
+      width: 100%;
+      max-width: 480px;
+      padding: 16px 24px 28px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    /* ── 오디오 레벨 시각화 ── */
+    #level-bar {
+      width: 200px;
+      height: 4px;
+      background: #222;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    #level-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #4caf50, #8bc34a);
+      border-radius: 2px;
+      transition: width 0.05s;
+    }
+
+    /* ── 녹음 버튼 ── */
+    #record-btn {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #6c63ff, #9c59ff);
+      color: white;
+      font-size: 28px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 20px rgba(108,99,255,0.4);
+      transition: transform 0.15s, box-shadow 0.15s, background 0.2s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    #record-btn:hover { transform: scale(1.05); }
+    #record-btn.recording {
+      background: linear-gradient(135deg, #f44336, #e91e63);
+      box-shadow: 0 4px 24px rgba(244,67,54,0.5);
+      transform: scale(1.08);
+    }
+    #record-btn.processing {
+      background: linear-gradient(135deg, #ff9800, #ff5722);
+      cursor: not-allowed;
+    }
+    #record-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #hint {
+      font-size: 12px;
+      color: #555;
+      text-align: center;
+    }
+
+    /* ── 화자 선택 ── */
+    #speaker-select {
+      background: #1e1e2e;
+      border: 1px solid #2a2a40;
+      color: #c9d1e8;
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="status-dot" id="status-dot"></div>
+  <h1>코디 음성 채팅</h1>
+  <select id="speaker-select" title="TTS 화자 선택" style="margin-left:auto">
+    <option value="ko-KR-Wavenet-A">여성 A (WaveNet)</option>
+    <option value="ko-KR-Wavenet-B">여성 B (WaveNet)</option>
+    <option value="ko-KR-Wavenet-C">남성 C (WaveNet)</option>
+    <option value="ko-KR-Wavenet-D">남성 D (WaveNet)</option>
+    <option value="ko-KR-Standard-A">여성 (Standard)</option>
+  </select>
+</header>
+
+<div id="chat">
+  <div class="bubble assistant">안녕! 오늘 코디 고민 있어? 뭐든 말해봐 🎙️</div>
+</div>
+
+<div id="controls">
+  <div id="level-bar"><div id="level-fill"></div></div>
+  <button id="record-btn" title="클릭해서 녹음 시작/중지">🎤</button>
+  <div id="hint">버튼을 눌러 말하고, 다시 누르면 전송</div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// 설정
+// ═══════════════════════════════════════════════════════════════════════════
+const WS_URL = `ws://${location.host}/voice/ws`;
+
+// VAD: 재생 중 이 볼륨 이상이면 인터럽트
+const INTERRUPT_THRESHOLD = 0.04;
+// VAD 체크 간격 (ms)
+const VAD_INTERVAL = 80;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 상태
+// ═══════════════════════════════════════════════════════════════════════════
+let ws = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let isProcessing = false;
+
+// TTS 재생 큐
+let audioQueue = [];
+let isPlaying = false;
+let currentAudio = null;
+
+// VAD (재생 중 인터럽트 감지)
+let audioCtx = null;
+let analyser = null;
+let micStream = null;
+let vadTimer = null;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOM
+// ═══════════════════════════════════════════════════════════════════════════
+const chatEl        = document.getElementById('chat');
+const recordBtn     = document.getElementById('record-btn');
+const statusDot     = document.getElementById('status-dot');
+const levelFill     = document.getElementById('level-fill');
+const hintEl        = document.getElementById('hint');
+const speakerSelect = document.getElementById('speaker-select');
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 상태 표시
+// ═══════════════════════════════════════════════════════════════════════════
+function setStatus(state) {
+  statusDot.className = `status-dot ${state}`;
+  recordBtn.className = 'recording processing playing'.includes(state)
+    ? `recording ${state === 'recording' ? 'recording' : ''} ${state === 'processing' ? 'processing' : ''}`
+    : '';
+
+  if (state === 'recording') {
+    recordBtn.textContent = '⏹';
+    hintEl.textContent = '말이 끝나면 다시 버튼 클릭';
+  } else if (state === 'processing') {
+    recordBtn.textContent = '⏳';
+    hintEl.textContent = '처리 중...';
+  } else if (state === 'playing') {
+    recordBtn.textContent = '🎤';
+    hintEl.textContent = '말하면 바로 끊을게 (인터럽트)';
+  } else {
+    recordBtn.textContent = '🎤';
+    hintEl.textContent = '버튼을 눌러 말하고, 다시 누르면 전송';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 채팅 버블 추가
+// ═══════════════════════════════════════════════════════════════════════════
+function addBubble(role, text) {
+  const div = document.createElement('div');
+  div.className = `bubble ${role}`;
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TTS 오디오 재생 큐
+// ═══════════════════════════════════════════════════════════════════════════
+function enqueueAudio(base64mp3) {
+  audioQueue.push(base64mp3);
+  if (!isPlaying) playNext();
+}
+
+function playNext() {
+  if (audioQueue.length === 0) {
+    isPlaying = false;
+    stopVAD();
+    setStatus('connected');
+    return;
+  }
+  isPlaying = true;
+  setStatus('playing');
+
+  const b64 = audioQueue.shift();
+  const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const blob  = new Blob([bytes], { type: 'audio/mp3' });
+  const url   = URL.createObjectURL(blob);
+
+  currentAudio = new Audio(url);
+  currentAudio.onended = () => {
+    URL.revokeObjectURL(url);
+    playNext();
+  };
+  currentAudio.onerror = () => {
+    URL.revokeObjectURL(url);
+    playNext();
+  };
+  currentAudio.play().catch(() => playNext());
+}
+
+function stopPlayback() {
+  audioQueue = [];
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+  isPlaying = false;
+  stopVAD();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VAD — 재생 중 마이크 볼륨 감지 → 인터럽트
+// ═══════════════════════════════════════════════════════════════════════════
+function startVAD() {
+  if (!analyser || vadTimer) return;
+  const data = new Uint8Array(analyser.fftSize);
+  vadTimer = setInterval(() => {
+    if (!isPlaying) { stopVAD(); return; }
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    levelFill.style.width = Math.min(rms * 500, 100) + '%';
+
+    if (rms > INTERRUPT_THRESHOLD && isPlaying) {
+      triggerInterrupt();
+    }
+  }, VAD_INTERVAL);
+}
+
+function stopVAD() {
+  if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
+  levelFill.style.width = '0%';
+}
+
+function triggerInterrupt() {
+  if (!isPlaying) return;
+  stopPlayback();
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'interrupt' }));
+  }
+  setStatus('connected');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 마이크 레벨 표시 (녹음 중)
+// ═══════════════════════════════════════════════════════════════════════════
+function startMicLevel() {
+  if (!analyser) return;
+  const data = new Uint8Array(analyser.fftSize);
+  function tick() {
+    if (!isRecording) { levelFill.style.width = '0%'; return; }
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    levelFill.style.width = Math.min(rms * 400, 100) + '%';
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WebSocket
+// ═══════════════════════════════════════════════════════════════════════════
+function connectWS() {
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    setStatus('connected');
+    statusDot.classList.add('connected');
+  };
+
+  ws.onclose = () => {
+    statusDot.className = 'status-dot';
+    hintEl.textContent = '연결 끊김 — 3초 후 재연결...';
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === 'transcript') {
+      addBubble('user', msg.text);
+      // 어시스턴트 버블 미리 생성 (스트리밍 텍스트용은 현재 사용 안 함)
+    }
+    else if (msg.type === 'audio_chunk') {
+      if (!isPlaying) setStatus('playing');
+      enqueueAudio(msg.data);
+      if (isPlaying) startVAD();
+    }
+    else if (msg.type === 'done') {
+      isProcessing = false;
+      // 재생이 끝날 때 setStatus는 playNext()가 처리
+    }
+    else if (msg.type === 'interrupted') {
+      isProcessing = false;
+      setStatus('connected');
+    }
+    else if (msg.type === 'error') {
+      isProcessing = false;
+      addBubble('error', '오류: ' + msg.message);
+      setStatus('connected');
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 녹음
+// ═══════════════════════════════════════════════════════════════════════════
+async function initMic() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(micStream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+  } catch (e) {
+    addBubble('error', '마이크 접근 권한이 필요합니다: ' + e.message);
+  }
+}
+
+function startRecording() {
+  if (!micStream) return;
+  if (isPlaying) triggerInterrupt();   // 재생 중이면 인터럽트 후 녹음
+
+  audioChunks = [];
+  mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' });
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+  mediaRecorder.onstop = sendAudio;
+  mediaRecorder.start(100);
+
+  isRecording = true;
+  setStatus('recording');
+  startMicLevel();
+}
+
+function stopRecording() {
+  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+  mediaRecorder.stop();
+  isRecording = false;
+  isProcessing = true;
+  setStatus('processing');
+}
+
+async function sendAudio() {
+  const blob = new Blob(audioChunks, { type: 'audio/webm' });
+  const buffer = await blob.arrayBuffer();
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({
+      type: 'audio',
+      data: b64,
+      speaker: speakerSelect.value,
+      context: {}   // TODO: Flask 세션에서 옷장·날씨 컨텍스트 주입
+    }));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 버튼 이벤트 (토글 방식)
+// ═══════════════════════════════════════════════════════════════════════════
+recordBtn.addEventListener('click', () => {
+  if (isProcessing) return;
+  if (isRecording) {
+    stopRecording();
+  } else {
+    startRecording();
+  }
+});
+
+// 스페이스바 단축키
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && e.target === document.body) {
+    e.preventDefault();
+    recordBtn.click();
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 초기화
+// ═══════════════════════════════════════════════════════════════════════════
+(async () => {
+  await initMic();
+  connectWS();
+})();
+</script>
+</body>
+</html>

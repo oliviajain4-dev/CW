@@ -114,3 +114,9 @@ python-dotenv
 
 # ── 흐름도 생성 ───────────────────────────────────
 matplotlib
+
+# ── 음성 파이프라인 (STT·TTS·Voice API) ─────────────
+openai-whisper
+fastapi
+uvicorn[standard]
+python-multipart

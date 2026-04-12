@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     libglib2.0-0 \
     libgl1 \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Python 의존성 설치 ─────────────────────────────
