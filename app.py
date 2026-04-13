@@ -859,4 +859,5 @@ def api_shopping(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000, reload=False)
+    print("서버 실행 중: http://127.0.0.1:5000")
+    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
