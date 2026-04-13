@@ -250,21 +250,38 @@ body {
   50%       { transform: translateX(-50%) scaleX(0.82); opacity: 0.22; }
 }
 
-/* 캐릭터 — 발끝을 바닥에 고정, 몸만 살짝 늘어나는 Breathing 효과 */
-.character-figure {
+/* ── Megan 3D 캐릭터 래퍼 ─────────────────────── */
+.megan-wrapper {
   position: absolute;
-  bottom: 9.2%;          /* ← 배경 이미지 바닥 라인에 맞게 조정 (기본값) */
+  bottom: 9.2%;
   left: 50%;
+  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  transform-origin: bottom center;
-  animation: charBreathe 3.5s ease-in-out infinite;
   z-index: 11;
+  pointer-events: none;
 }
-@keyframes charBreathe {
-  0%, 100% { transform: translateX(-50%) scaleY(1); }
-  50%       { transform: translateX(-50%) scaleY(1.025); }
+
+#meganCanvas {
+  width: 340px;
+  height: 520px;
+  display: block;
+  pointer-events: auto;
+}
+
+.megan-loading {
+  position: absolute;
+  top: 260px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: rgba(153, 68, 187, 0.85);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 12;
+  animation: bubblePop 1.5s ease-in-out infinite;
 }
 
 /* ── CSS 캐릭터 — 포니테일, 핑크재킷, 검정 스커트 ── */

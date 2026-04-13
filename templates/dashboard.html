@@ -38,43 +38,21 @@
   <div class="voice-tip-bubble" id="voiceTip1" style="display:none; left:calc(50% + 110px); bottom:28%;"></div>
   <div class="voice-tip-bubble" id="voiceTip2" style="display:none; left:calc(50% + 95px);  bottom:15%;"></div>
 
-  <div class="character-figure">
+  <!-- 3D 메간 캐릭터 -->
+  <div class="megan-wrapper">
     <div class="char-bubble">
       {% if profile.get('name') %}{{ profile['name'] }}님, 오늘도 예쁘게!{% else %}오늘 코디 골라볼까요?{% endif %}
     </div>
-    <div class="char-head">
-      <div class="char-eyes">
-        <div class="char-eye"></div>
-        <div class="char-eye"></div>
-      </div>
-      <div class="char-cheeks">
-        <div class="char-cheek"></div>
-        <div class="char-cheek"></div>
-      </div>
-      <div class="char-mouth"></div>
-    </div>
-    <!-- 원피스는 상의+하의 동시 커버하는 래퍼 필요 -->
-    <div class="char-body-wrap">
-      <div class="char-torso" id="charTorso">
-        <div class="char-arm-l"></div>
-        <div class="char-arm-r"></div>
-        <img id="charTopImg" class="char-clothing-img" src="" alt="">
-        <img id="charOuterImg" class="char-clothing-img char-outer-img" src="" alt="">
-      </div>
-      <div class="char-skirt" id="charSkirt">
-        <img id="charBottomImg" class="char-clothing-img" src="" alt="">
-      </div>
-      <!-- 원피스 오버레이 (상의+하의 전체 커버) -->
-      <img id="charDressImg" class="char-dress-img" src="" alt="">
-    </div>
-    <div class="char-legs">
-      <div class="char-leg"></div>
-      <div class="char-leg"></div>
-    </div>
-    <div class="char-shoes">
-      <div class="char-shoe"></div>
-      <div class="char-shoe"></div>
-    </div>
+    <div id="meganLoading" class="megan-loading">✨ 불러오는 중...</div>
+    <canvas id="meganCanvas"></canvas>
+  </div>
+
+  <!-- JS 호환용 숨김 요소 (main.js wearItem 참조) — 나중에 3D 옷 입히기로 교체 예정 -->
+  <div style="display:none">
+    <img id="charTopImg"    src="" alt="">
+    <img id="charOuterImg"  src="" alt="">
+    <img id="charBottomImg" src="" alt="">
+    <img id="charDressImg"  src="" alt="">
   </div>
 </div>
 
@@ -506,5 +484,103 @@
 
   // ── 쇼핑 패널은 독립적으로 로드 ─────────────────────────────────
   loadShoppingCards();
+</script>
+
+<!-- ── Three.js Megan 3D 캐릭터 ──────────────────────────────── -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+
+const CANVAS_W = 340;
+const CANVAS_H = 520;
+
+const canvas = document.getElementById('meganCanvas');
+canvas.width  = CANVAS_W;
+canvas.height = CANVAS_H;
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+renderer.setSize(CANVAS_W, CANVAS_H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, CANVAS_W / CANVAS_H, 1, 10000);
+
+// 조명 (패션 촬영 스타일)
+scene.add(new THREE.AmbientLight(0xffeedd, 2.2));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+keyLight.position.set(1.5, 3, 2);
+scene.add(keyLight);
+const fillLight = new THREE.DirectionalLight(0xfff0e8, 1.0);
+fillLight.position.set(-2, 1, -1);
+scene.add(fillLight);
+
+let mixer = null;
+const clock = new THREE.Clock();
+
+// FBX 로드
+const loader = new FBXLoader();
+loader.load(
+  '/static/models/megan.fbx',
+  (fbx) => {
+    scene.add(fbx);
+
+    // 바운딩 박스로 자동 카메라 조정
+    const box  = new THREE.Box3().setFromObject(fbx);
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+
+    // 발을 바닥(y=0)에 맞추고 좌우 중앙 정렬
+    fbx.position.set(-center.x, -box.min.y, -center.z);
+
+    // 가로/세로 모두 고려해서 캐릭터 전체가 나오도록 카메라 거리 계산
+    const fovRad  = (camera.fov * Math.PI) / 180;
+    const hFovRad = 2 * Math.atan(Math.tan(fovRad / 2) * (CANVAS_W / CANVAS_H));
+    const distH   = (size.y * 0.6) / Math.tan(fovRad  / 2);   // 세로 기준
+    const distW   = (size.x * 0.6) / Math.tan(hFovRad / 2);   // 가로(팔 포함) 기준
+    const dist    = Math.max(distH, distW) * 1.15;             // 더 먼 쪽 선택 + 여백
+    camera.position.set(0, size.y * 0.48, dist);
+    camera.lookAt(0, size.y * 0.48, 0);
+
+    // 애니메이션 클립이 포함된 FBX면 자동 재생
+    if (fbx.animations && fbx.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(fbx);
+      mixer.clipAction(fbx.animations[0]).play();
+    }
+
+    document.getElementById('meganLoading')?.remove();
+  },
+  (xhr) => {
+    if (xhr.total > 0) {
+      const pct = Math.round((xhr.loaded / xhr.total) * 100);
+      const el  = document.getElementById('meganLoading');
+      if (el) el.textContent = `${pct}% 로딩 중...`;
+    }
+  },
+  (err) => {
+    console.error('[Megan] FBX 로드 실패:', err);
+    const el = document.getElementById('meganLoading');
+    if (el) el.textContent = '캐릭터 로드 실패 😢';
+  }
+);
+
+// 렌더 루프
+let t = 0;
+(function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+  if (mixer) mixer.update(delta);   // 애니메이션 있으면 재생
+  t += 0.004;
+  scene.rotation.y = Math.sin(t) * 0.15;  // 없으면 살짝 회전
+  renderer.render(scene, camera);
+})();
 </script>
 {% endblock %}
