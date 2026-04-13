@@ -554,12 +554,13 @@ body {
 }
 
 /* 패널 위치 */
-#weatherPanel { top: 64px; left: 88px; width: 260px; }
-#stylePanel   { top: 64px; left: 88px; width: 280px; }
-#itemPanel    { top: 64px; left: 88px; width: 300px; }
-#designerPanel{ top: 64px; left: 88px; width: 300px; }
-#chatPanel    { bottom: 52px; right: 16px; width: 300px; }
-#profilePanel { top: 64px; right: 16px; width: 260px; }
+#weatherPanel  { top: 64px; left: 88px; width: 260px; }
+#stylePanel    { top: 64px; left: 88px; width: 280px; }
+#itemPanel     { top: 64px; left: 88px; width: 300px; }
+#designerPanel { top: 64px; left: 88px; width: 300px; }
+#shoppingPanel { top: 64px; left: 88px; width: 300px; }
+#chatPanel     { bottom: 52px; right: 16px; width: 300px; }
+#profilePanel  { top: 64px; right: 16px; width: 260px; }
 
 /* ── 패널 내 텍스트 색상 오버라이드 ─────────── */
 .panel-body .weather-label { color: #FFE0A0; font-weight: 700; }
@@ -688,6 +689,22 @@ body {
   overflow-y: auto;
   margin-bottom: 8px;
   display: flex; flex-direction: column; gap: 6px;
+}
+/* 채팅 패널 전용: panel-body 커지면 chat-window가 함께 커짐 */
+#chatPanel .panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#chatPanel .chat-window {
+  flex: 1;
+  min-height: 80px;
+  height: auto;
+  margin-bottom: 0;
+}
+#chatPanel .chat-input-row {
+  flex-shrink: 0;
+  padding-top: 8px;
 }
 .chat-msg {
   max-width: 82%; padding: 8px 12px;
