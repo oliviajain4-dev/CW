@@ -471,30 +471,40 @@
     container.innerHTML = html;
   }
 
-  // ── 메인 fetch ───────────────────────────────────────────────────
+  // ── 1단계: 날씨·스타일 빠르게 로드 (quick=true, AI 코멘트 없음) ──
+  fetch('/api/recommend?quick=true')
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) return;
+      const { weather, style_rec, layering, wardrobe_matches } = data;
+      fillWeatherPanel(weather, style_rec, layering);
+      fillStylePanel(style_rec, wardrobe_matches);
+      chatContext.weather_label     = style_rec.condition_label;
+      chatContext.recommended_items = style_rec.recommended_items.join(', ');
+    })
+    .catch(() => {
+      ['weatherBody','styleBody'].forEach(id => {
+        document.getElementById(id).innerHTML = '<p class="empty-msg">날씨 데이터를 불러올 수 없어요.</p>';
+      });
+    });
+
+  // ── 2단계: AI 디자이너 코멘트 별도 로드 (느리므로 분리) ──────────
   fetch('/api/recommend')
     .then(r => r.json())
     .then(data => {
       if (data.error) {
-        ['weatherBody','styleBody','designerBody'].forEach(id => {
-          document.getElementById(id).innerHTML = `<p class="empty-msg">연결 오류: ${data.error}</p>`;
-        });
+        document.getElementById('designerBody').innerHTML =
+          `<p class="empty-msg">연결 오류: ${data.error}</p>`;
         return;
       }
-      const { weather, style_rec, layering, comment, wardrobe_matches } = data;
-      fillWeatherPanel(weather, style_rec, layering);
-      fillStylePanel(style_rec, wardrobe_matches);
-      fillDesignerPanel(comment);
-      chatContext.weather_label      = style_rec.condition_label;
-      chatContext.recommended_items  = style_rec.recommended_items.join(', ');
+      if (data.comment) fillDesignerPanel(data.comment);
     })
     .catch(() => {
-      ['weatherBody','styleBody','designerBody'].forEach(id => {
-        document.getElementById(id).innerHTML = '<p class="empty-msg">데이터를 불러올 수 없어요.</p>';
-      });
+      document.getElementById('designerBody').innerHTML =
+        '<p class="empty-msg">AI 분석 데이터를 불러올 수 없어요.</p>';
     });
 
-  // 쇼핑 패널은 독립적으로 로드 (메인 추천과 무관하게)
+  // ── 쇼핑 패널은 독립적으로 로드 ─────────────────────────────────
   loadShoppingCards();
 </script>
 {% endblock %}

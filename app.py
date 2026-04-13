@@ -227,18 +227,55 @@ def allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
-def upload_image(file_path: str, user_id=None, subfolder: str = "wardrobe") -> str:
+# 카테고리 한→영 변환 (Cloudinary public_id는 영문만 권장)
+_CAT_EN = {"상의": "top", "하의": "bottom", "아우터": "outer", "원피스": "dress"}
+
+
+def upload_image(
+    file_path: str,
+    user_id=None,
+    subfolder: str = "wardrobe",   # 하위 호환용 (무시됨)
+    category: str = None,
+    item_name: str = None,
+) -> str:
+    """
+    Cloudinary 업로드 + 회원별 폴더/파일명 규칙 적용.
+
+    폴더  : users/{user_id}/closet
+    파일명: user{uid}__{cat}__{item}__{timestamp}
+            예) user42__top__shirt__20260413_104818
+
+    Cloudinary 미설정 → 로컬 경로 그대로 반환.
+    업로드 실패 → RuntimeError 발생 (호출부에서 DB 저장을 막음).
+    """
     if not _CLOUDINARY_ENABLED:
         return file_path
-    folder = f"cw_app/user_{user_id}/{subfolder}" if user_id else f"cw_app/shared/{subfolder}"
+
+    # 폴더: wardrobe → users/{id}/closet, 그 외(profile 등) → users/{id}/{subfolder}
+    if subfolder == "wardrobe":
+        folder = f"users/{user_id}/closet" if user_id else "shared/closet"
+    else:
+        folder = f"users/{user_id}/{subfolder}" if user_id else f"shared/{subfolder}"
+
+    ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cat_en    = _CAT_EN.get(category or "", subfolder)
+    item_slug = (item_name or "item").replace(" ", "_").replace("/", "_")
+    uid_str   = str(user_id)[:12] if user_id else "anon"
+    public_id = f"user{uid_str}__{cat_en}__{item_slug}__{ts}"
+
     try:
         result = cloudinary.uploader.upload(
-            file_path, folder=folder, resource_type="image", overwrite=False,
+            file_path,
+            folder=folder,
+            public_id=public_id,
+            resource_type="image",
+            overwrite=False,
         )
-        return result["secure_url"]
+        url = result["secure_url"]
+        print(f"[Cloudinary] 업로드 완료: {folder}/{public_id} → {url[:60]}...")
+        return url
     except Exception as e:
-        print(f"Cloudinary 업로드 실패: {e}")
-        return file_path
+        raise RuntimeError(f"Cloudinary 업로드 실패: {e}") from e
 
 
 def _cloudinary_public_id(url: str) -> str:
@@ -522,7 +559,7 @@ def dashboard(request: Request):
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
             (user.id,)
         )
     return render(request, "dashboard.html", {
@@ -579,7 +616,7 @@ def wardrobe(request: Request):
     with get_db() as conn:
         items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY category, created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
             (user.id,)
         )
     categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
@@ -592,6 +629,7 @@ def wardrobe(request: Request):
 
 @app.post("/wardrobe/add", name="wardrobe_add")
 async def wardrobe_add(request: Request):
+    import asyncio
     user  = _require_user(request)
     form  = await request.form()
     files = form.getlist("image")
@@ -603,33 +641,60 @@ async def wardrobe_add(request: Request):
     if not valid_files:
         return RedirectResponse("/wardrobe", status_code=302)
 
-    from model import analyze_outfit
+    from model import analyze_outfit_batch
     errors = []
 
+    # ── 1. 모든 파일 먼저 저장 ────────────────────────────────────────
+    saved = []   # (local_path, orig_filename)
     for file in valid_files:
         filename   = secure_filename(file.filename)
         timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S_")
         filename   = timestamp + filename
         local_path = os.path.join(UPLOAD_FOLDER, filename).replace("\\", "/")
-
         contents = await file.read()
         with open(local_path, "wb") as f:
             f.write(contents)
+        saved.append((local_path, file.filename))
 
+    # ── 2. 배치 분석 (한 번의 forward pass로 전체 처리 → 속도 개선) ──
+    try:
+        local_paths = [lp for lp, _ in saved]
+        print(f"[wardrobe_add] 분석 시작: {len(local_paths)}장")
+        results = await asyncio.to_thread(analyze_outfit_batch, local_paths)
+        for fname, res in zip([os.path.basename(p) for p in local_paths], results):
+            cat  = next((k for k in ["아우터","원피스","상의","하의"] if k in res), "?")
+            item = res.get(cat, {}).get("item", "?") if cat != "?" else "?"
+            print(f"[wardrobe_add] {fname[:30]} → 카테고리={cat}, 아이템={item}")
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        for lp, _ in saved:
+            if os.path.exists(lp):
+                os.remove(lp)
+        flash(request, f"AI 분석 실패: {e}", "error")
+        return RedirectResponse("/wardrobe", status_code=302)
+
+    # ── 3. Cloudinary 업로드 → DB 저장 (순서 중요: 업로드 실패 시 DB 저장 안 함) ──
+    for (local_path, orig_filename), result in zip(saved, results):
         try:
-            result = analyze_outfit(local_path)
             category = next((k for k in ["아우터", "원피스", "상의", "하의"] if k in result), None)
             if category is None:
-                raise ValueError("분석 결과에 카테고리가 없습니다.")
+                raise ValueError("분류 결과에 카테고리가 없습니다.")
 
             item_info    = result[category]
             item_name    = str(item_info["item"])
             item_warmth  = int(item_info["warmth"])
             item_texture = str(item_info["texture"])
 
-            save_path = upload_image(local_path, user_id=user.id, subfolder="wardrobe")
+            # Cloudinary 업로드 (실패 시 RuntimeError → DB 저장 건너뜀)
+            save_path = upload_image(
+                local_path,
+                user_id=user.id,
+                subfolder="wardrobe",
+                category=category,
+                item_name=item_name,
+            )
 
-            ph = "%s" if is_postgres() else "?"
+            # Cloudinary 성공 후에만 DB에 기록 (트랜잭션 보장)
             with get_db() as conn:
                 if is_postgres():
                     execute(conn, """
@@ -644,11 +709,17 @@ async def wardrobe_add(request: Request):
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, (user.id, save_path, category, item_name, item_warmth, item_texture,
                           datetime.now().isoformat()))
+
+        except RuntimeError as e:
+            # Cloudinary 업로드 실패 → DB 저장 안 함
+            if os.path.exists(local_path):
+                os.remove(local_path)
+            errors.append(f"{orig_filename}: 업로드 실패 — {e}")
         except Exception as e:
             import traceback; traceback.print_exc()
             if os.path.exists(local_path):
                 os.remove(local_path)
-            errors.append(f"{file.filename}: AI 분석 실패 — {e}")
+            errors.append(f"{orig_filename}: 처리 실패 — {e}")
 
     if errors:
         flash(request, "일부 이미지 분석 오류: " + " / ".join(errors), "error")
@@ -736,7 +807,14 @@ def api_weather(request: Request):
 
 
 @app.get("/api/recommend", name="api_recommend")
-def api_recommend(request: Request):
+async def api_recommend(request: Request, quick: bool = False):
+    """
+    quick=true  → 날씨·스타일·옷장 매칭만 반환 (AI 코멘트 생략, ~1s)
+    quick=false → 전체 반환 (AI 코멘트 포함, ~4s)
+    프론트에서 quick=true 먼저 호출 → 날씨/스타일 즉시 표시,
+    그다음 full 호출 → 디자이너 코멘트 표시
+    """
+    import asyncio
     user    = _require_user(request)
     profile = load_profile(user.id)
     try:
@@ -746,6 +824,7 @@ def api_recommend(request: Request):
 
         sensitivity = int(profile.get("sensitivity", 3))
         tpo         = profile.get("tpo", "일상")
+        style_pref  = (profile or {}).get("style_pref", "캐주얼")
         nx = int(profile.get("location_nx") or profile.get("nx") or 62)
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
@@ -754,37 +833,28 @@ def api_recommend(request: Request):
             all_items = fetchall(
                 conn,
                 f"SELECT id, category, item_type, warmth, texture, image_path "
-                f"FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
+                f"FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
                 (user.id,)
             )
 
-        cache_key = f"{user.id},{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
-        cached    = _recommend_cache.get(cache_key)
-        if cached and time.time() - cached["ts"] < _CACHE_TTL:
-            return JSONResponse(cached["data"])
+        cache_key      = f"{user.id},{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
+        cache_key_full = cache_key + ",full"
+        cached_full    = _recommend_cache.get(cache_key_full)
+        if cached_full and time.time() - cached_full["ts"] < _CACHE_TTL:
+            return JSONResponse(cached_full["data"])
 
-        weather   = get_weather(nx=nx, ny=ny)
+        # ── 날씨는 항상 필요 ─────────────────────────────────────────
+        cached_quick = _recommend_cache.get(cache_key)
+        if cached_quick and time.time() - cached_quick["ts"] < _CACHE_TTL:
+            weather = cached_quick["data"]["weather"]
+        else:
+            weather = await asyncio.to_thread(get_weather, nx=nx, ny=ny)
+
         style_rec = get_style_recommendation(
             weather["morning"]["feels_like"], weather["morning"]["reh"],
             weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
         )
         layering = get_layering_recommendation(weather, sensitivity)
-
-        wardrobe_for_ai = [
-            {"category": it["category"], "item_type": it["item_type"],
-             "warmth": it.get("warmth", 0), "texture": it.get("texture", "미상")}
-            for it in all_items
-        ]
-        from chatbot.shopping import get_fashion_news
-        trend_news = get_fashion_news((profile or {}).get("style_pref", "캐주얼"))
-
-        outfit_result = get_outfit_comment(
-            weather, style_rec, layering, tpo, profile or None, wardrobe_for_ai, trend_news
-        )
-        comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
-        bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
-
-        save_style_log(user.id, weather, style_rec, layering, comment, tpo)
 
         temp_range  = style_rec.get("temp_range", "mild")
         top_min     = _TOP_WARMTH_MIN.get(temp_range, 0)
@@ -809,18 +879,79 @@ def api_recommend(request: Request):
         for cat in wardrobe_matches:
             wardrobe_matches[cat] = wardrobe_matches[cat][:3]
 
-        result = {
+        quick_result = {
             "weather": weather, "style_rec": style_rec, "layering": layering,
-            "comment": comment, "bubbles": bubbles, "wardrobe_matches": wardrobe_matches,
+            "wardrobe_matches": wardrobe_matches,
         }
-        _recommend_cache[cache_key] = {"data": result, "ts": time.time()}
-        return JSONResponse(result)
+        _recommend_cache[cache_key] = {"data": quick_result, "ts": time.time()}
+
+        # quick=true 이면 AI 코멘트 없이 즉시 반환
+        if quick:
+            return JSONResponse(quick_result)
+
+        # ── AI 코멘트 + 패션뉴스 병렬 로드 ──────────────────────────
+        from chatbot.shopping import get_fashion_news
+
+        wardrobe_for_ai = [
+            {"category": it["category"], "item_type": it["item_type"],
+             "warmth": it.get("warmth", 0), "texture": it.get("texture", "미상")}
+            for it in all_items
+        ]
+
+        trend_news = await asyncio.to_thread(get_fashion_news, style_pref)
+        outfit_result = await asyncio.to_thread(
+            get_outfit_comment, weather, style_rec, layering, tpo,
+            profile or None, wardrobe_for_ai, trend_news
+        )
+        comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
+        bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
+
+        save_style_log(user.id, weather, style_rec, layering, comment, tpo)
+
+        full_result = {**quick_result, "comment": comment, "bubbles": bubbles}
+        _recommend_cache[cache_key_full] = {"data": full_result, "ts": time.time()}
+        return JSONResponse(full_result)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/wardrobe", name="api_wardrobe")
+def api_wardrobe(request: Request):
+    """
+    챗봇·개인화 엔진용 옷장 데이터 API.
+    로그인한 유저 본인 옷만 반환.
+    카테고리별로 그룹화하여 반환.
+    """
+    user = _require_user(request)
+    ph = "%s" if is_postgres() else "?"
+    with get_db() as conn:
+        items = fetchall(
+            conn,
+            f"SELECT id, category, item_type, warmth, texture, image_path, created_at "
+            f"FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            (user.id,)
+        )
+    grouped: dict = {"상의": [], "하의": [], "원피스": [], "아우터": []}
+    for item in items:
+        cat = item.get("category", "")
+        if cat in grouped:
+            grouped[cat].append({
+                "id":        item["id"],
+                "item_type": item["item_type"],
+                "warmth":    item.get("warmth", 0),
+                "texture":   item.get("texture", ""),
+                "image_url": item.get("image_path", ""),
+            })
+    return JSONResponse({
+        "user_id":    user.id,
+        "total":      len(items),
+        "categories": grouped,
+    })
+
+
 @app.get("/api/shopping", name="api_shopping")
-def api_shopping(request: Request):
+async def api_shopping(request: Request):
+    import asyncio
     user    = _require_user(request)
     profile = load_profile(user.id)
     try:
@@ -829,6 +960,7 @@ def api_shopping(request: Request):
         from chatbot.weather_style_mapper import get_style_recommendation
 
         sensitivity = int(profile.get("sensitivity", 3))
+        style_pref  = (profile or {}).get("style_pref", "캐주얼")
         nx = int(profile.get("location_nx") or profile.get("nx") or 62)
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
@@ -837,17 +969,31 @@ def api_shopping(request: Request):
             all_items = fetchall(
                 conn,
                 f"SELECT category, item_type, warmth, texture FROM wardrobe_items "
-                f"WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
+                f"WHERE user_id={ph} ORDER BY created_at DESC",
                 (user.id,)
             )
 
-        weather   = get_weather(nx=nx, ny=ny)
+        # 날씨 캐시 활용 (recommend API가 먼저 호출된 경우 재사용)
+        cache_key    = f"{user.id},{nx},{ny}"
+        cached_quick = next(
+            (v for k, v in _recommend_cache.items() if k.startswith(cache_key)),
+            None
+        )
+        if cached_quick and time.time() - cached_quick["ts"] < _CACHE_TTL:
+            weather = cached_quick["data"]["weather"]
+        else:
+            weather = await asyncio.to_thread(get_weather, nx=nx, ny=ny)
+
         style_rec = get_style_recommendation(
             weather["morning"]["feels_like"], weather["morning"]["reh"],
             weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
         )
-        trend_news = get_fashion_news((profile or {}).get("style_pref", "캐주얼"))
-        cards = get_shopping_cards(all_items, style_rec, profile or None, trend_news)
+
+        # 패션뉴스 + 쇼핑카드 생성 병렬화
+        trend_news = await asyncio.to_thread(get_fashion_news, style_pref)
+        cards = await asyncio.to_thread(
+            get_shopping_cards, all_items, style_rec, profile or None, trend_news
+        )
         return JSONResponse({"cards": cards})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
