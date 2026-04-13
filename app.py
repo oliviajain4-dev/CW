@@ -1,91 +1,74 @@
 """
-app.py — 내 옷장의 코디 Flask 웹 대시보드
+app.py — 내 옷장의 코디 FastAPI 통합 서버 (포트 5000)
+Flask → FastAPI 마이그레이션 + 음성 파이프라인(voice/router.py) 통합
+
 라우트:
-  GET  /                    → 대시보드 (날씨 + 오늘 코디 + 챗봇)
-  GET  /profile             → 개인정보 입력 페이지
-  POST /profile             → 개인정보 저장
-  GET  /wardrobe            → 옷장 목록
-  POST /wardrobe/add        → 옷 이미지 업로드 & 분석
-  POST /wardrobe/delete/<id>→ 옷 삭제
-  POST /feedback/<log_id>   → 코디 피드백 저장 (모델 개선용)
-  POST /chat                → 챗봇 API (JSON)
-  GET  /api/weather         → 현재 날씨 JSON
-  GET  /api/recommend       → 코디 추천 JSON
+  GET  /                     → 대시보드
+  GET  /login                → 로그인 페이지
+  POST /login                → 로그인 처리
+  POST /signup               → 회원가입
+  GET  /auth/google          → Google OAuth 시작
+  GET  /auth/google/callback → Google OAuth 콜백
+  GET  /logout               → 로그아웃
+  GET  /profile              → 프로필 페이지
+  POST /profile              → 프로필 저장
+  GET  /wardrobe             → 옷장 목록
+  POST /wardrobe/add         → 옷 업로드 & AI 분석
+  POST /wardrobe/delete/{id} → 옷 삭제
+  POST /wardrobe/move/{id}   → 카테고리 변경
+  POST /feedback/{log_id}    → 코디 피드백
+  POST /chat                 → 챗봇 API
+  GET  /api/weather          → 날씨 JSON
+  GET  /api/recommend        → 코디 추천 JSON
+  GET  /api/shopping         → 쇼핑 추천 JSON
+  GET  /fashion-show         → 패션쇼 페이지
+  + voice/* (voice/router.py)
 """
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
-import os
-import json
-import time
-from datetime import datetime
-from dotenv import load_dotenv
-from werkzeug.utils import secure_filename
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import (
-    LoginManager, UserMixin,
-    login_user, logout_user, login_required, current_user,
-)
+from __future__ import annotations
 
-# db.py: PostgreSQL(Docker) 또는 SQLite(로컬) 자동 선택
-from db import get_db, fetchall, fetchone, execute, executereturning, \
-               save_style_log, save_feedback, is_postgres, db_engine
+import json
+import os
+import time
+import uuid
+from datetime import datetime
+from typing import List, Optional
+
+from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(24))
+import cloudinary
+import cloudinary.uploader
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
-# ── Flask-Login 설정 ───────────────────────────────────────────────
-login_manager = LoginManager(app)
-login_manager.login_view    = "login_page"   # 미로그인 시 리다이렉트
-login_manager.login_message = None           # 기본 경고 메시지 숨김
+from db import (
+    db_engine, execute, executereturning, fetchall, fetchone,
+    get_db, is_postgres, save_feedback, save_style_log,
+)
+from voice.router import router as voice_router
 
+# ══════════════════════════════════════════════════════════════════
+# 앱 초기화
+# ══════════════════════════════════════════════════════════════════
 
-class User(UserMixin):
-    """Flask-Login에서 사용하는 사용자 모델."""
-    def __init__(self, row: dict):
-        self.id         = str(row["id"])
-        self.name       = row.get("name") or ""
-        self.email      = row.get("email") or ""
-        self.avatar_url = row.get("avatar_url") or ""
+app = FastAPI(title="내 옷장의 코디")
 
-    @staticmethod
-    def get(user_id: str):
-        try:
-            with get_db() as conn:
-                ph  = "%s" if is_postgres() else "?"
-                row = fetchone(conn, f"SELECT * FROM users WHERE id={ph}", (user_id,))
-                return User(row) if row else None
-        except Exception:
-            return None
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.getenv("FLASK_SECRET_KEY", "change-me-please"),
+)
 
-
-@login_manager.user_loader
-def load_user(user_id: str):
-    return User.get(user_id)
+app.mount("/static", StaticFiles(directory="static"), name="static_files")
+templates = Jinja2Templates(directory="templates")
 
 
-# ── Google OAuth 설정 ──────────────────────────────────────────────
-_GOOGLE_ENABLED = bool(os.getenv("GOOGLE_CLIENT_ID"))
-if _GOOGLE_ENABLED:
-    from authlib.integrations.flask_client import OAuth
-    _oauth = OAuth(app)
-    _google = _oauth.register(
-        name="google",
-        client_id=os.getenv("GOOGLE_CLIENT_ID"),
-        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
-        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
-    )
-
-UPLOAD_FOLDER = "static/uploads"
-ALLOWED_EXT   = {"jpg", "jpeg", "png"}
-PROFILE_PATH  = "user_profile.json"    # SQLite 환경용 폴백
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
-
-@app.template_filter("img_url")
 def img_url_filter(image_path: str) -> str:
     """Cloudinary URL이면 그대로, 로컬 경로면 /static/... 형태로 변환"""
     if not image_path:
@@ -96,89 +79,240 @@ def img_url_filter(image_path: str) -> str:
     return f"/static/{clean}"
 
 
-# ── Cloudinary 설정 ────────────────────────────────────────────────
-import cloudinary
-import cloudinary.uploader
+templates.env.filters["img_url"] = img_url_filter
 
+# 음성 파이프라인 라우터 통합
+app.include_router(voice_router)
+
+# ── Cloudinary ────────────────────────────────────────────────────
 _CLOUDINARY_ENABLED = bool(os.getenv("CLOUDINARY_CLOUD_NAME"))
 if _CLOUDINARY_ENABLED:
     cloudinary.config(
-        cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"),
-        api_key    = os.getenv("CLOUDINARY_API_KEY"),
-        api_secret = os.getenv("CLOUDINARY_API_SECRET"),
-        secure     = True,
+        cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+        api_key=os.getenv("CLOUDINARY_API_KEY"),
+        api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+        secure=True,
     )
+
+# ── Google OAuth ──────────────────────────────────────────────────
+_GOOGLE_ENABLED = bool(os.getenv("GOOGLE_CLIENT_ID"))
+_oauth = None
+if _GOOGLE_ENABLED:
+    from authlib.integrations.starlette_client import OAuth
+    _oauth = OAuth()
+    _oauth.register(
+        name="google",
+        client_id=os.getenv("GOOGLE_CLIENT_ID"),
+        client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
+        server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+# ── 상수 ─────────────────────────────────────────────────────────
+UPLOAD_FOLDER = "static/uploads"
+ALLOWED_EXT   = {"jpg", "jpeg", "png"}
+PROFILE_PATH  = "user_profile.json"
+
+_recommend_cache: dict = {}
+_CACHE_TTL = 1800
+
+_TOP_WARMTH_MIN = {
+    "freezing": 2, "very_cold": 1, "cold": 1, "cool": 0,
+    "mild": 0, "warm": 0, "hot": 0, "very_hot": 0,
+}
+_NEEDS_OUTER = {"freezing", "very_cold", "cold", "cool"}
+
+
+# ══════════════════════════════════════════════════════════════════
+# Auth 유틸
+# ══════════════════════════════════════════════════════════════════
+
+class _AnonymousUser:
+    is_authenticated = False
+    id = None
+    name = ""
+    email = ""
+    avatar_url = ""
+
+
+class User:
+    is_authenticated = True
+
+    def __init__(self, row: dict):
+        self.id         = str(row["id"])
+        self.name       = row.get("name") or ""
+        self.email      = row.get("email") or ""
+        self.avatar_url = row.get("avatar_url") or ""
+
+    @staticmethod
+    def get(user_id: str) -> Optional["User"]:
+        try:
+            ph  = "%s" if is_postgres() else "?"
+            with get_db() as conn:
+                row = fetchone(conn, f"SELECT * FROM users WHERE id={ph}", (user_id,))
+                return User(row) if row else None
+        except Exception:
+            return None
+
+
+class _LoginRequired(Exception):
+    pass
+
+
+@app.exception_handler(_LoginRequired)
+async def _login_required_handler(request: Request, exc: _LoginRequired):
+    return RedirectResponse("/login", status_code=302)
+
+
+def _get_user(request: Request) -> User | _AnonymousUser:
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return _AnonymousUser()
+    return User.get(user_id) or _AnonymousUser()
+
+
+def _require_user(request: Request) -> User:
+    """로그인 필수. 미로그인이면 _LoginRequired 발생 → /login 리다이렉트."""
+    user = _get_user(request)
+    if not user.is_authenticated:
+        raise _LoginRequired()
+    return user
+
+
+# ── Flash 메시지 ───────────────────────────────────────────────────
+def flash(request: Request, message: str, category: str = "info"):
+    if "_flash" not in request.session:
+        request.session["_flash"] = []
+    request.session["_flash"].append([category, message])
+
+
+# ── 템플릿 렌더 헬퍼 ───────────────────────────────────────────────
+def render(request: Request, name: str, ctx: dict = {}) -> HTMLResponse:
+    """
+    FastAPI Jinja2 템플릿을 Flask와 호환되게 렌더.
+    - url_for('route_name') 및 url_for('static', filename='...')
+    - get_flashed_messages(with_categories=True/False)
+    - current_user (User | _AnonymousUser)
+    - endpoint (현재 라우트 함수명, base.html 네비 active 표시용)
+    """
+    user       = _get_user(request)
+    flash_msgs = request.session.pop("_flash", [])
+
+    def _url_for(endpoint: str, **kwargs) -> str:
+        if endpoint == "static":
+            return f"/static/{kwargs.get('filename', '')}"
+        try:
+            return request.url_for(endpoint, **kwargs).path
+        except Exception:
+            return f"/{endpoint}"
+
+    def _get_flashed(with_categories: bool = False):
+        return flash_msgs if with_categories else [m for _, m in flash_msgs]
+
+    ep_func = request.scope.get("endpoint")
+    ep = ep_func.__name__ if callable(ep_func) else ""
+
+    return templates.TemplateResponse(request, name, {
+        "current_user":         user,
+        "url_for":              _url_for,
+        "get_flashed_messages": _get_flashed,
+        "endpoint":             ep,
+        **ctx,
+    })
+
+
+# ── 유틸 ──────────────────────────────────────────────────────────
+
+def allowed_file(filename: str) -> bool:
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
 def upload_image(file_path: str, user_id=None, subfolder: str = "wardrobe") -> str:
-    """로컬 파일을 Cloudinary에 업로드하고 URL 반환. 실패 시 로컬 경로 반환.
-
-    Cloudinary 폴더 구조:
-      cw_app/user_{user_id}/wardrobe/  ← 옷장 이미지
-      cw_app/user_{user_id}/profile/   ← 프로필 사진
-    """
     if not _CLOUDINARY_ENABLED:
         return file_path
     folder = f"cw_app/user_{user_id}/{subfolder}" if user_id else f"cw_app/shared/{subfolder}"
     try:
         result = cloudinary.uploader.upload(
-            file_path,
-            folder=folder,
-            resource_type="image",
-            overwrite=False,
+            file_path, folder=folder, resource_type="image", overwrite=False,
         )
         return result["secure_url"]
     except Exception as e:
-        print(f"Cloudinary 업로드 실패, 로컬 경로 사용: {e}")
+        print(f"Cloudinary 업로드 실패: {e}")
         return file_path
 
 
 def _cloudinary_public_id(url: str) -> str:
-    """Cloudinary URL에서 public_id를 추출한다.
-
-    예) https://res.cloudinary.com/demo/image/upload/v123/cw_app/user_1/wardrobe/file.jpg
-        → cw_app/user_1/wardrobe/file
-    """
     try:
         after_upload = url.split("/upload/", 1)[1]
-        # v{숫자}/ 버전 prefix 제거
         if after_upload.startswith("v") and "/" in after_upload:
             _, after_upload = after_upload.split("/", 1)
         return after_upload.rsplit(".", 1)[0]
     except Exception:
-        # fallback: 끝에서 두 세그먼트만 (이전 방식)
         parts = url.split("/")
         return "/".join(parts[-2:]).rsplit(".", 1)[0]
 
 
 def delete_image(image_path: str) -> None:
-    """Cloudinary URL이면 Cloudinary에서 삭제, 로컬 경로면 파일 삭제."""
     if not image_path:
         return
     if image_path.startswith("http"):
         try:
-            public_id = _cloudinary_public_id(image_path)
-            cloudinary.uploader.destroy(public_id)
+            cloudinary.uploader.destroy(_cloudinary_public_id(image_path))
         except Exception as e:
             print(f"Cloudinary 삭제 실패: {e}")
     else:
         if os.path.exists(image_path) and "uploads" in image_path:
             os.remove(image_path)
 
-# ── 날씨/AI 추천 캐시 (30분) ──────────────────────
-_dashboard_cache = {"data": None, "ts": 0}
-CACHE_TTL = 30 * 60  # 30분
-_recommend_cache: dict = {}
-_CACHE_TTL = 1800  # 30분(초)
+
+def load_profile(user_id: str = None) -> dict:
+    if not user_id:
+        return {}
+    if is_postgres():
+        with get_db() as conn:
+            row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (user_id,))
+            return dict(row) if row else {}
+    else:
+        if os.path.exists(PROFILE_PATH):
+            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
 
 
-# ── 유틸 ──────────────────────────────────────────────────────────
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
+def save_profile_data(data: dict, user_id: str) -> str:
+    if is_postgres() and user_id:
+        with get_db() as conn:
+            execute(conn, """
+                UPDATE users SET
+                    name=%s, gender=%s, height=%s, weight=%s,
+                    body_type=%s, style_pref=%s, sensitivity=%s,
+                    tpo=%s, location_nx=%s, location_ny=%s
+                WHERE id=%s
+            """, (
+                data["name"], data["gender"],
+                int(data["height"]) if data["height"] else None,
+                int(data["weight"]) if data["weight"] else None,
+                data["body_type"], data["style_pref"],
+                int(data["sensitivity"]), data["tpo"],
+                int(data["nx"]), int(data["ny"]),
+                user_id,
+            ))
+        return user_id
+    else:
+        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return "local"
+
+
+def _save_avatar(user_id: str, avatar_url: str) -> None:
+    if not user_id or user_id == "local":
+        return
+    ph = "%s" if is_postgres() else "?"
+    with get_db() as conn:
+        execute(conn, f"UPDATE users SET avatar_url={ph} WHERE id={ph}", (avatar_url, user_id))
 
 
 def init_db():
-    """테이블 생성 및 기존 DB 컬럼 마이그레이션."""
     if is_postgres():
         with get_db() as conn:
             for col, definition in [
@@ -188,13 +322,11 @@ def init_db():
                 ("avatar_url",    "TEXT"),
             ]:
                 execute(conn, f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {definition}")
-            # google_id, email UNIQUE 인덱스 (이미 있으면 무시)
             execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_email_uidx    ON users(email)     WHERE email IS NOT NULL")
             execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_uidx ON users(google_id) WHERE google_id IS NOT NULL")
-        print(f"[DB] {db_engine()} 연결됨 (마이그레이션 완료)")
+        print(f"[DB] {db_engine()} 연결됨")
         return
 
-    # SQLite 폴백
     with get_db() as conn:
         execute(conn, """
             CREATE TABLE IF NOT EXISTS wardrobe_items (
@@ -223,130 +355,88 @@ def init_db():
                 created_at TEXT, updated_at TEXT
             )
         """)
-        # 기존 DB에 누락된 컬럼 추가 마이그레이션
-        # SQLite는 IF NOT EXISTS 미지원 → try/except로 처리
         for col, definition in [
-            ("email",         "TEXT"),
-            ("password_hash", "TEXT"),
-            ("google_id",     "TEXT"),
-            ("avatar_url",    "TEXT"),
+            ("email", "TEXT"), ("password_hash", "TEXT"),
+            ("google_id", "TEXT"), ("avatar_url", "TEXT"),
         ]:
             try:
                 execute(conn, f"ALTER TABLE users ADD COLUMN {col} {definition}")
             except Exception:
-                pass  # 이미 존재하면 무시
+                pass
     print(f"[DB] {db_engine()} 초기화 완료")
 
 
-# ── 사용자 프로필 로드/저장 ────────────────────────────────────────
-def load_profile(user_id=None) -> dict:
-    uid = user_id or (current_user.id if current_user.is_authenticated else None)
-    if not uid:
-        return {}
-    if is_postgres():
-        with get_db() as conn:
-            row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (uid,))
-            return dict(row) if row else {}
-    else:
-        if os.path.exists(PROFILE_PATH):
-            with open(PROFILE_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {}
+# ══════════════════════════════════════════════════════════════════
+# 시작 이벤트
+# ══════════════════════════════════════════════════════════════════
 
-
-def _save_avatar(user_id: str, avatar_url: str) -> None:
-    """프로필 사진 URL을 users 테이블에 저장."""
-    if not user_id or user_id == "local":
-        return
-    ph = "%s" if is_postgres() else "?"
-    with get_db() as conn:
-        execute(conn, f"UPDATE users SET avatar_url={ph} WHERE id={ph}", (avatar_url, user_id))
-
-
-def save_profile_data(data: dict) -> str:
-    uid = current_user.id if current_user.is_authenticated else None
-    if is_postgres() and uid:
-        with get_db() as conn:
-            execute(conn, """
-                UPDATE users SET
-                    name=%s, gender=%s, height=%s, weight=%s,
-                    body_type=%s, style_pref=%s, sensitivity=%s,
-                    tpo=%s, location_nx=%s, location_ny=%s
-                WHERE id=%s
-            """, (
-                data["name"], data["gender"],
-                int(data["height"]) if data["height"] else None,
-                int(data["weight"]) if data["weight"] else None,
-                data["body_type"], data["style_pref"],
-                int(data["sensitivity"]), data["tpo"],
-                int(data["nx"]), int(data["ny"]),
-                uid,
-            ))
-        return uid
-    else:
-        with open(PROFILE_PATH, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return "local"
+@app.on_event("startup")
+def startup():
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    init_db()
 
 
 # ══════════════════════════════════════════════════════════════════
-# ── 인증 라우트 ───────────────────────────────────────────────────
+# 인증 라우트
 # ══════════════════════════════════════════════════════════════════
 
-@app.route("/login", methods=["GET"])
-def login_page():
-    if current_user.is_authenticated:
-        return redirect(url_for("dashboard"))
-    return render_template("login.html", active_tab="login")
+@app.get("/login", name="login_page")
+def login_page(request: Request):
+    user = _get_user(request)
+    if user.is_authenticated:
+        return RedirectResponse("/", status_code=302)
+    return render(request, "login.html", {"active_tab": "login"})
 
 
-@app.route("/login", methods=["POST"])
-def login():
-    email    = request.form.get("email", "").strip().lower()
-    password = request.form.get("password", "")
+@app.post("/login", name="login")
+async def login(request: Request):
+    form     = await request.form()
+    email    = str(form.get("email", "")).strip().lower()
+    password = str(form.get("password", ""))
 
     if not email or not password:
-        flash("이메일과 비밀번호를 입력해주세요.", "error")
-        return render_template("login.html", active_tab="login")
+        flash(request, "이메일과 비밀번호를 입력해주세요.", "error")
+        return render(request, "login.html", {"active_tab": "login"})
 
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         row = fetchone(conn, f"SELECT * FROM users WHERE email={ph}", (email,))
 
     if not row or not row.get("password_hash"):
-        flash("이메일 또는 비밀번호가 올바르지 않습니다.", "error")
-        return render_template("login.html", active_tab="login")
+        flash(request, "이메일 또는 비밀번호가 올바르지 않습니다.", "error")
+        return render(request, "login.html", {"active_tab": "login"})
 
     if not check_password_hash(row["password_hash"], password):
-        flash("이메일 또는 비밀번호가 올바르지 않습니다.", "error")
-        return render_template("login.html", active_tab="login")
+        flash(request, "이메일 또는 비밀번호가 올바르지 않습니다.", "error")
+        return render(request, "login.html", {"active_tab": "login"})
 
-    login_user(User(row), remember=True)
-    return redirect(url_for("dashboard"))
+    request.session["user_id"] = str(row["id"])
+    return RedirectResponse("/", status_code=302)
 
 
-@app.route("/signup", methods=["POST"])
-def signup():
-    name      = request.form.get("name", "").strip()
-    email     = request.form.get("email", "").strip().lower()
-    password  = request.form.get("password", "")
-    password2 = request.form.get("password2", "")
+@app.post("/signup", name="signup")
+async def signup(request: Request):
+    form      = await request.form()
+    name      = str(form.get("name", "")).strip()
+    email     = str(form.get("email", "")).strip().lower()
+    password  = str(form.get("password", ""))
+    password2 = str(form.get("password2", ""))
 
     if not name or not email or not password:
-        flash("모든 항목을 입력해주세요.", "error")
-        return render_template("login.html", active_tab="signup")
+        flash(request, "모든 항목을 입력해주세요.", "error")
+        return render(request, "login.html", {"active_tab": "signup"})
     if len(password) < 8:
-        flash("비밀번호는 8자 이상이어야 합니다.", "error")
-        return render_template("login.html", active_tab="signup")
+        flash(request, "비밀번호는 8자 이상이어야 합니다.", "error")
+        return render(request, "login.html", {"active_tab": "signup"})
     if password != password2:
-        flash("비밀번호가 일치하지 않습니다.", "error")
-        return render_template("login.html", active_tab="signup")
+        flash(request, "비밀번호가 일치하지 않습니다.", "error")
+        return render(request, "login.html", {"active_tab": "signup"})
 
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         if fetchone(conn, f"SELECT id FROM users WHERE email={ph}", (email,)):
-            flash("이미 가입된 이메일입니다.", "error")
-            return render_template("login.html", active_tab="signup")
+            flash(request, "이미 가입된 이메일입니다.", "error")
+            return render(request, "login.html", {"active_tab": "signup"})
 
         hashed = generate_password_hash(password)
         if is_postgres():
@@ -355,7 +445,6 @@ def signup():
                 VALUES (%s, %s, %s) RETURNING id
             """, (name, email, hashed))
         else:
-            import uuid
             user_id = str(uuid.uuid4())
             execute(conn, """
                 INSERT INTO users (id, name, email, password_hash)
@@ -364,168 +453,171 @@ def signup():
 
         row = fetchone(conn, f"SELECT * FROM users WHERE id={ph}", (str(user_id),))
 
-    login_user(User(row), remember=True)
-    flash(f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
-    return redirect(url_for("profile"))
+    request.session["user_id"] = str(row["id"])
+    flash(request, f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
+    return RedirectResponse("/profile", status_code=302)
 
 
-@app.route("/auth/google")
-def auth_google():
-    if not _GOOGLE_ENABLED:
-        flash("Google 로그인이 설정되지 않았습니다. (.env에 GOOGLE_CLIENT_ID 추가 필요)", "error")
-        return redirect(url_for("login_page"))
-    redirect_uri = url_for("auth_google_callback", _external=True)
-    return _google.authorize_redirect(redirect_uri)
+@app.get("/auth/google", name="auth_google")
+async def auth_google(request: Request):
+    if not _GOOGLE_ENABLED or not _oauth:
+        flash(request, "Google 로그인이 설정되지 않았습니다.", "error")
+        return RedirectResponse("/login", status_code=302)
+    redirect_uri = str(request.url_for("auth_google_callback"))
+    return await _oauth.google.authorize_redirect(request, redirect_uri)
 
 
-@app.route("/auth/google/callback")
-def auth_google_callback():
-    if not _GOOGLE_ENABLED:
-        return redirect(url_for("login_page"))
+@app.get("/auth/google/callback", name="auth_google_callback")
+async def auth_google_callback(request: Request):
+    if not _GOOGLE_ENABLED or not _oauth:
+        return RedirectResponse("/login", status_code=302)
     try:
-        token     = _google.authorize_access_token()
+        token     = await _oauth.google.authorize_access_token(request)
         user_info = token.get("userinfo") or {}
         google_id = user_info.get("sub")
         email     = (user_info.get("email") or "").lower()
         name      = user_info.get("name") or email.split("@")[0]
         picture   = user_info.get("picture")
     except Exception as e:
-        flash(f"Google 로그인 오류: {e}", "error")
-        return redirect(url_for("login_page"))
+        flash(request, f"Google 로그인 오류: {e}", "error")
+        return RedirectResponse("/login", status_code=302)
 
     with get_db() as conn:
-        # 1) google_id로 기존 계정 조회
         row = fetchone(conn, "SELECT * FROM users WHERE google_id=%s", (google_id,))
         if not row and email:
-            # 2) 같은 이메일로 가입된 계정이 있으면 google_id 연결
             row = fetchone(conn, "SELECT * FROM users WHERE email=%s", (email,))
             if row:
                 execute(conn, "UPDATE users SET google_id=%s, avatar_url=COALESCE(avatar_url,%s) WHERE id=%s",
                         (google_id, picture, row["id"]))
                 row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (row["id"],))
-
         if not row:
-            # 3) 신규 사용자 생성
             user_id = executereturning(conn, """
                 INSERT INTO users (name, email, google_id, avatar_url)
                 VALUES (%s, %s, %s, %s) RETURNING id
             """, (name, email, google_id, picture))
             row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (str(user_id),))
 
-    login_user(User(row), remember=True)
-    # 프로필 미완성이면 프로필 페이지로
+    request.session["user_id"] = str(row["id"])
     if not row.get("gender"):
-        flash(f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
-        return redirect(url_for("profile"))
-    return redirect(url_for("dashboard"))
+        flash(request, f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
+        return RedirectResponse("/profile", status_code=302)
+    return RedirectResponse("/", status_code=302)
 
 
-@app.route("/logout")
-@login_required
-def logout():
-    logout_user()
-    return redirect(url_for("login_page"))
+@app.get("/logout", name="logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=302)
 
 
-# ── 라우트 ────────────────────────────────────────────────────────
-@app.route("/")
-@login_required
-def dashboard():
-    """날씨·AI 호출 없이 즉시 반환 — 무거운 데이터는 JS가 /api/recommend 비동기 fetch"""
-    profile = load_profile()
+# ══════════════════════════════════════════════════════════════════
+# 메인 라우트
+# ══════════════════════════════════════════════════════════════════
+
+@app.get("/", name="dashboard")
+def dashboard(request: Request):
+    user = _require_user(request)
+    profile = load_profile(user.id)
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
             f"SELECT * FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
-            (current_user.id,)
+            (user.id,)
         )
-    return render_template("dashboard.html",
-        profile=profile,
-        wardrobe_items=wardrobe_items,
-        db_engine=db_engine(),
-        now=datetime.now()
-    )
+    return render(request, "dashboard.html", {
+        "profile":        profile,
+        "wardrobe_items": wardrobe_items,
+        "db_engine":      db_engine(),
+        "now":            datetime.now(),
+    })
 
 
-@app.route("/profile", methods=["GET", "POST"])
-@login_required
-def profile():
-    if request.method == "POST":
-        data = {
-            "name":        request.form.get("name", "").strip(),
-            "gender":      request.form.get("gender", "미입력"),
-            "height":      request.form.get("height", ""),
-            "weight":      request.form.get("weight", ""),
-            "body_type":   request.form.get("body_type", "보통"),
-            "style_pref":  request.form.get("style_pref", "캐주얼"),
-            "sensitivity": request.form.get("sensitivity", "3"),
-            "tpo":         request.form.get("tpo", "일상"),
-            "nx":          request.form.get("nx", "62"),
-            "ny":          request.form.get("ny", "123"),
-        }
-        user_id = save_profile_data(data)
-
-        # 프로필 사진 업로드 (선택)
-        avatar_file = request.files.get("avatar")
-        if avatar_file and avatar_file.filename and allowed_file(avatar_file.filename):
-            filename   = secure_filename(avatar_file.filename)
-            local_path = os.path.join(app.config["UPLOAD_FOLDER"], f"avatar_{user_id}_{filename}").replace("\\", "/")
-            avatar_file.save(local_path)
-            avatar_url = upload_image(local_path, user_id=user_id, subfolder="profile")
-            # DB에 avatar_url 저장
-            _save_avatar(user_id, avatar_url)
-
-        return redirect(url_for("dashboard"))
-
-    profile_data = load_profile()
-    return render_template("profile.html", profile=profile_data)
+@app.get("/profile", name="profile")
+def profile_get(request: Request):
+    user = _require_user(request)
+    return render(request, "profile.html", {"profile": load_profile(user.id)})
 
 
-@app.route("/wardrobe")
-@login_required
-def wardrobe():
+@app.post("/profile", name="profile_save")
+async def profile_post(request: Request):
+    user = _require_user(request)
+    form = await request.form()
+
+    data = {
+        "name":        str(form.get("name", "")).strip(),
+        "gender":      str(form.get("gender", "미입력")),
+        "height":      str(form.get("height", "")),
+        "weight":      str(form.get("weight", "")),
+        "body_type":   str(form.get("body_type", "보통")),
+        "style_pref":  str(form.get("style_pref", "캐주얼")),
+        "sensitivity": str(form.get("sensitivity", "3")),
+        "tpo":         str(form.get("tpo", "일상")),
+        "nx":          str(form.get("nx", "62")),
+        "ny":          str(form.get("ny", "123")),
+    }
+    uid = save_profile_data(data, user.id)
+
+    avatar_file = form.get("avatar")
+    if avatar_file and hasattr(avatar_file, "filename") and avatar_file.filename and allowed_file(avatar_file.filename):
+        filename   = secure_filename(avatar_file.filename)
+        timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S_")
+        local_path = os.path.join(UPLOAD_FOLDER, f"avatar_{timestamp}{filename}").replace("\\", "/")
+        contents   = await avatar_file.read()
+        with open(local_path, "wb") as f:
+            f.write(contents)
+        avatar_url = upload_image(local_path, user_id=uid, subfolder="profile")
+        _save_avatar(uid, avatar_url)
+
+    return RedirectResponse("/", status_code=302)
+
+
+@app.get("/wardrobe", name="wardrobe")
+def wardrobe(request: Request):
+    user = _require_user(request)
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         items = fetchall(
             conn,
             f"SELECT * FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY category, created_at DESC",
-            (current_user.id,)
+            (user.id,)
         )
     categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
     for item in items:
         cat = item["category"]
         if cat in categories:
             categories[cat].append(item)
-    return render_template("wardrobe.html", categories=categories)
+    return render(request, "wardrobe.html", {"categories": categories})
 
 
-@app.route("/wardrobe/add", methods=["POST"])
-@login_required
-def wardrobe_add():
-    if "image" not in request.files:
-        return redirect(url_for("wardrobe"))
+@app.post("/wardrobe/add", name="wardrobe_add")
+async def wardrobe_add(request: Request):
+    user  = _require_user(request)
+    form  = await request.form()
+    files = form.getlist("image")
 
-    files = [f for f in request.files.getlist("image")
-             if f.filename != "" and allowed_file(f.filename)]
-    if not files:
-        return redirect(url_for("wardrobe"))
-
-    user_id = current_user.id
-    errors  = []
+    valid_files = [
+        f for f in files
+        if hasattr(f, "filename") and f.filename and allowed_file(f.filename)
+    ]
+    if not valid_files:
+        return RedirectResponse("/wardrobe", status_code=302)
 
     from model import analyze_outfit
+    errors = []
 
-    for file in files:
+    for file in valid_files:
         filename   = secure_filename(file.filename)
         timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S_")
         filename   = timestamp + filename
-        local_path = os.path.join(app.config["UPLOAD_FOLDER"], filename).replace("\\", "/")
-        file.save(local_path)
+        local_path = os.path.join(UPLOAD_FOLDER, filename).replace("\\", "/")
+
+        contents = await file.read()
+        with open(local_path, "wb") as f:
+            f.write(contents)
 
         try:
             result = analyze_outfit(local_path)
-
             category = next((k for k in ["아우터", "원피스", "상의", "하의"] if k in result), None)
             if category is None:
                 raise ValueError("분석 결과에 카테고리가 없습니다.")
@@ -535,21 +627,22 @@ def wardrobe_add():
             item_warmth  = int(item_info["warmth"])
             item_texture = str(item_info["texture"])
 
-            save_path = upload_image(local_path, user_id=user_id, subfolder="wardrobe")
+            save_path = upload_image(local_path, user_id=user.id, subfolder="wardrobe")
 
+            ph = "%s" if is_postgres() else "?"
             with get_db() as conn:
                 if is_postgres():
                     execute(conn, """
                         INSERT INTO wardrobe_items
                             (user_id, image_path, category, item_type, warmth, texture, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    """, (user_id, save_path, category, item_name, item_warmth, item_texture))
+                    """, (user.id, save_path, category, item_name, item_warmth, item_texture))
                 else:
                     execute(conn, """
                         INSERT INTO wardrobe_items
                             (user_id, image_path, category, item_type, warmth, texture, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (user_id, save_path, category, item_name, item_warmth, item_texture,
+                    """, (user.id, save_path, category, item_name, item_warmth, item_texture,
                           datetime.now().isoformat()))
         except Exception as e:
             import traceback; traceback.print_exc()
@@ -558,108 +651,94 @@ def wardrobe_add():
             errors.append(f"{file.filename}: AI 분석 실패 — {e}")
 
     if errors:
-        flash("일부 이미지 분석 오류: " + " / ".join(errors), "error")
+        flash(request, "일부 이미지 분석 오류: " + " / ".join(errors), "error")
 
-    return redirect(url_for("wardrobe"))
+    return RedirectResponse("/wardrobe", status_code=302)
 
 
-@app.route("/wardrobe/move/<int:item_id>", methods=["POST"])
-@login_required
-def wardrobe_move(item_id):
-    """옷 카테고리 변경 (드래그&드롭)"""
-    data = request.get_json()
+@app.post("/wardrobe/move/{item_id}", name="wardrobe_move")
+async def wardrobe_move(item_id: int, request: Request):
+    _require_user(request)
+    data         = await request.json()
     new_category = data.get("category")
     if new_category not in ["상의", "하의", "원피스", "아우터"]:
-        return jsonify({"error": "invalid category"}), 400
+        return JSONResponse({"error": "invalid category"}, status_code=400)
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         execute(conn, f"UPDATE wardrobe_items SET category={ph} WHERE id={ph}", (new_category, item_id))
-    return jsonify({"ok": True})
+    return JSONResponse({"ok": True})
 
 
-@app.route("/wardrobe/delete/<int:item_id>", methods=["POST"])
-@login_required
-def wardrobe_delete(item_id):
+@app.post("/wardrobe/delete/{item_id}", name="wardrobe_delete")
+def wardrobe_delete(item_id: int, request: Request):
+    _require_user(request)
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:
         row = fetchone(conn, f"SELECT image_path FROM wardrobe_items WHERE id={ph}", (item_id,))
         if row:
-            img_path = str(row["image_path"] or "")  # type: ignore[arg-type, index]
-            # id 기준으로 해당 항목만 삭제
+            img_path = str(row["image_path"] or "")
             execute(conn, f"DELETE FROM wardrobe_items WHERE id={ph}", (item_id,))
-            # 같은 image_path를 참조하는 다른 행이 없을 때만 이미지 삭제
             if img_path:
                 remaining = fetchone(conn, f"SELECT id FROM wardrobe_items WHERE image_path={ph}", (img_path,))
                 if remaining is None:
                     delete_image(img_path)
-    return redirect(url_for("wardrobe"))
+    return RedirectResponse("/wardrobe", status_code=302)
 
 
-@app.route("/feedback/<int:log_id>", methods=["POST"])
-@login_required
-def feedback(log_id):
-    """
-    코디 피드백 저장 — 누적 데이터로 모델 개선
-    """
-    data     = request.get_json()
+@app.get("/fashion-show", name="fashion_show")
+def fashion_show(request: Request):
+    _require_user(request)
+    return render(request, "fashion_show.html")
+
+
+# ══════════════════════════════════════════════════════════════════
+# API 라우트
+# ══════════════════════════════════════════════════════════════════
+
+@app.post("/feedback/{log_id}", name="feedback")
+async def feedback(log_id: int, request: Request):
+    _require_user(request)
+    data     = await request.json()
     score    = data.get("score")
     text     = data.get("text", "")
     was_worn = data.get("was_worn")
-
     save_feedback(log_id, score, text, was_worn)
-    return jsonify({"status": "ok", "log_id": log_id})
+    return JSONResponse({"status": "ok", "log_id": log_id})
 
 
-@app.route("/chat", methods=["POST"])
-@login_required
-def chat():
-    data    = request.get_json()
+@app.post("/chat", name="chat")
+async def chat(request: Request):
+    _require_user(request)
+    data    = await request.json()
     message = data.get("message", "")
     context = data.get("context", {})
-
     if not message:
-        return jsonify({"error": "메시지가 없어요"}), 400
-
+        return JSONResponse({"error": "메시지가 없어요"}, status_code=400)
     try:
         from chatbot.llm_client import get_chatbot_response
         reply = get_chatbot_response(message, context)
-        return jsonify({"reply": reply})
+        return JSONResponse({"reply": reply})
     except Exception as e:
-        return jsonify({"reply": f"(오류: {e})"}), 500
+        return JSONResponse({"reply": f"(오류: {e})"}, status_code=500)
 
 
-@app.route("/api/weather")
-@login_required
-def api_weather():
-    profile = load_profile()
+@app.get("/api/weather", name="api_weather")
+def api_weather(request: Request):
+    user    = _require_user(request)
+    profile = load_profile(user.id)
     try:
         from chatbot.weather_client import get_weather
         nx = int(profile.get("location_nx") or profile.get("nx") or 62)
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
-        weather = get_weather(nx=nx, ny=ny)
-        return jsonify(weather)
+        return JSONResponse(get_weather(nx=nx, ny=ny))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-# 날씨 온도 구간별 상의 최소 보온도 / 아우터 필요 여부
-_TOP_WARMTH_MIN = {
-    "freezing": 2, "very_cold": 1, "cold": 1, "cool": 0,
-    "mild": 0, "warm": 0, "hot": 0, "very_hot": 0,
-}
-_NEEDS_OUTER = {"freezing", "very_cold", "cold", "cool"}
-
-
-@app.route("/fashion-show")
-@login_required
-def fashion_show():
-    return render_template("fashion_show.html")
-
-
-@app.route("/api/recommend")
-@login_required
-def api_recommend():
-    profile = load_profile()
+@app.get("/api/recommend", name="api_recommend")
+def api_recommend(request: Request):
+    user    = _require_user(request)
+    profile = load_profile(user.id)
     try:
         from chatbot.weather_client import get_weather
         from chatbot.weather_style_mapper import get_style_recommendation, get_layering_recommendation
@@ -670,31 +749,27 @@ def api_recommend():
         nx = int(profile.get("location_nx") or profile.get("nx") or 62)
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
-        # 옷장 먼저 조회 — AI 프롬프트 + 캐시 키 + 이미지 매칭에 모두 사용
-        user_id = profile.get("id")
         ph = "%s" if is_postgres() else "?"
         with get_db() as conn:
             all_items = fetchall(
                 conn,
                 f"SELECT id, category, item_type, warmth, texture, image_path "
                 f"FROM wardrobe_items WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
-                (user_id,)
+                (user.id,)
             )
 
-        # 캐시 키에 user_id + 옷장 수 포함 → 유저 구분 + 옷 추가/삭제 시 자동 무효화
-        cache_key = f"{user_id},{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
-        cached = _recommend_cache.get(cache_key)
+        cache_key = f"{user.id},{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
+        cached    = _recommend_cache.get(cache_key)
         if cached and time.time() - cached["ts"] < _CACHE_TTL:
-            return jsonify(cached["data"])
+            return JSONResponse(cached["data"])
 
         weather   = get_weather(nx=nx, ny=ny)
         style_rec = get_style_recommendation(
             weather["morning"]["feels_like"], weather["morning"]["reh"],
             weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
         )
-        layering  = get_layering_recommendation(weather, sensitivity)
+        layering = get_layering_recommendation(weather, sensitivity)
 
-        # AI에게 실제 옷장 + 트렌드 뉴스 전달
         wardrobe_for_ai = [
             {"category": it["category"], "item_type": it["item_type"],
              "warmth": it.get("warmth", 0), "texture": it.get("texture", "미상")}
@@ -704,16 +779,13 @@ def api_recommend():
         trend_news = get_fashion_news((profile or {}).get("style_pref", "캐주얼"))
 
         outfit_result = get_outfit_comment(
-            weather, style_rec, layering, tpo,
-            profile or None, wardrobe_for_ai, trend_news
+            weather, style_rec, layering, tpo, profile or None, wardrobe_for_ai, trend_news
         )
         comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
         bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
 
-        # 스타일 로그 DB 저장
-        save_style_log(user_id, weather, style_rec, layering, comment, tpo)
+        save_style_log(user.id, weather, style_rec, layering, comment, tpo)
 
-        # ── 날씨에 맞는 옷장 이미지 매칭 (패널 표시용) ────────────
         temp_range  = style_rec.get("temp_range", "mild")
         top_min     = _TOP_WARMTH_MIN.get(temp_range, 0)
         needs_outer = temp_range in _NEEDS_OUTER
@@ -738,26 +810,21 @@ def api_recommend():
             wardrobe_matches[cat] = wardrobe_matches[cat][:3]
 
         result = {
-            "weather":          weather,
-            "style_rec":        style_rec,
-            "layering":         layering,
-            "comment":          comment,
-            "bubbles":          bubbles,
-            "wardrobe_matches": wardrobe_matches,
+            "weather": weather, "style_rec": style_rec, "layering": layering,
+            "comment": comment, "bubbles": bubbles, "wardrobe_matches": wardrobe_matches,
         }
         _recommend_cache[cache_key] = {"data": result, "ts": time.time()}
-        return jsonify(result)
+        return JSONResponse(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@app.route("/api/shopping")
-@login_required
-def api_shopping():
-    """옷장 분석 → AI 쇼핑 필요 목록 → 네이버 상품 (or 무신사 fallback)"""
-    profile = load_profile()
+@app.get("/api/shopping", name="api_shopping")
+def api_shopping(request: Request):
+    user    = _require_user(request)
+    profile = load_profile(user.id)
     try:
-        from chatbot.shopping import get_shopping_cards
+        from chatbot.shopping import get_shopping_cards, get_fashion_news
         from chatbot.weather_client import get_weather
         from chatbot.weather_style_mapper import get_style_recommendation
 
@@ -766,13 +833,12 @@ def api_shopping():
         ny = int(profile.get("location_ny") or profile.get("ny") or 123)
 
         ph = "%s" if is_postgres() else "?"
-        user_id = profile.get("id")
         with get_db() as conn:
             all_items = fetchall(
                 conn,
                 f"SELECT category, item_type, warmth, texture FROM wardrobe_items "
                 f"WHERE user_id={ph} OR user_id IS NULL ORDER BY created_at DESC",
-                (user_id,)
+                (user.id,)
             )
 
         weather   = get_weather(nx=nx, ny=ny)
@@ -780,17 +846,17 @@ def api_shopping():
             weather["morning"]["feels_like"], weather["morning"]["reh"],
             weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
         )
-
-        from chatbot.shopping import get_fashion_news
         trend_news = get_fashion_news((profile or {}).get("style_pref", "캐주얼"))
         cards = get_shopping_cards(all_items, style_rec, profile or None, trend_news)
-        return jsonify({"cards": cards})
+        return JSONResponse({"cards": cards})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return JSONResponse({"error": str(e)}, status_code=500)
 
+
+# ══════════════════════════════════════════════════════════════════
+# 실행
+# ══════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    init_db()
-    # Docker 환경에서 reloader=False: reloader가 두 번째 프로세스 spawn하여 주소창 두 개 뜨는 문제 방지
-    app.run(debug=True, host="0.0.0.0", port=5000, use_reloader=False)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000, reload=False)

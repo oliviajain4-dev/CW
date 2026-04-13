@@ -19,12 +19,12 @@
       <span>👗</span> My Mini Co-di
     </a>
     <div class="nav-center">
-      <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}class="active"{% endif %}>Home</a>
-      <a href="{{ url_for('wardrobe') }}" {% if request.endpoint == 'wardrobe' %}class="active"{% endif %}>My Wardrobe</a>
-      <a href="{{ url_for('profile') }}" {% if request.endpoint == 'profile' %}class="active"{% endif %}>Profile</a>
+      <a href="{{ url_for('dashboard') }}" {% if endpoint == 'dashboard' %}class="active"{% endif %}>Home</a>
+      <a href="{{ url_for('wardrobe') }}" {% if endpoint == 'wardrobe' %}class="active"{% endif %}>My Wardrobe</a>
+      <a href="{{ url_for('profile') }}" {% if endpoint == 'profile' or endpoint == 'profile_get' %}class="active"{% endif %}>Profile</a>
     </div>
     <div class="nav-right">
-      {% if request.endpoint == 'dashboard' %}
+      {% if endpoint == 'dashboard' %}
       <button class="nav-icon-btn" onclick="togglePanel('chatPanel')" title="채팅">💬</button>
       {% endif %}
       <button class="nav-icon-btn" onclick="location.href='{{ url_for('profile') }}'" title="설정">⚙️</button>
