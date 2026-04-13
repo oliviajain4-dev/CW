@@ -21,6 +21,11 @@ static/uploads/*
 *.pth
 *.onnx
 
+# 3D 모델 파일 (용량 큼 — Cloudinary 또는 외부 스토리지 사용)
+*.fbx
+*.glb
+*.gltf
+
 # 사용자 프로필 (개인정보)
 user_profile.json
 
