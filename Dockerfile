@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # ── 베이스 이미지 ──────────────────────────────────
 FROM python:3.10-slim
 
@@ -18,11 +17,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # requirements.txt 먼저 복사 → 소스 변경 시 pip 레이어 캐시 재사용
 COPY requirements.txt .
 
-# BuildKit 캐시 마운트: 재빌드 시 다운로드 없이 캐시에서 재사용
-# torch CPU-only 버전은 별도 인덱스 필요
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt \
-    --extra-index-url https://download.pytorch.org/whl/cpu
+# torch CPU 전용 먼저 설치 (PyPI 버전은 CUDA 의존이라 별도 인덱스 사용)
+RUN pip install torch torchvision \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# 나머지 패키지 설치
+RUN pip install -r requirements.txt
 
 # ── 앱 소스 복사 ───────────────────────────────────
 COPY . .
