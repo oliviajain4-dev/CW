@@ -587,6 +587,10 @@ body {
 #itemPanel     { top: 64px; left: 88px; width: 300px; }
 #designerPanel { top: 64px; left: 88px; width: 300px; }
 #shoppingPanel { top: 64px; left: 88px; width: 300px; }
+#calendarPanel { top: 64px; left: 88px; width: 280px; min-height: 200px; }
+#calendarPanel .panel-header {
+  flex-shrink: 0;
+}
 #chatPanel     { bottom: 52px; right: 16px; width: 300px; }
 #profilePanel  { top: 64px; right: 16px; width: 260px; }
 

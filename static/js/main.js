@@ -184,7 +184,7 @@ function togglePanel(id) {
   const isOpen = panel.classList.contains('open');
 
   // 왼쪽 패널끼리는 하나만 열기 (같은 위치 겹치므로)
-  const leftPanels = ['weatherPanel','stylePanel','itemPanel','designerPanel','shoppingPanel'];
+  const leftPanels = ['weatherPanel','stylePanel','itemPanel','designerPanel','shoppingPanel','calendarPanel'];
   if (leftPanels.includes(id)) {
     leftPanels.forEach(p => { if (p !== id) closePanel(p); });
   }
@@ -202,7 +202,8 @@ function togglePanel(id) {
       weatherPanel: 'btn-weather', stylePanel: 'btn-style',
       itemPanel: 'btn-item', designerPanel: 'btn-designer',
       shoppingPanel: 'btn-shopping',
-      chatPanel: 'btn-chat', profilePanel: 'btn-profile'
+      chatPanel: 'btn-chat', profilePanel: 'btn-profile',
+      calendarPanel: 'btn-calendar'
     };
     const btn = document.getElementById(btnMap[id]);
     if (btn) btn.classList.add('active');

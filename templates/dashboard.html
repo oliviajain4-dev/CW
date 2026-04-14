@@ -17,6 +17,9 @@
   <button class="sidebar-btn" onclick="togglePanel('shoppingPanel')" id="btn-shopping">
     🛍<span class="btn-label">쇼핑</span>
   </button>
+  <button class="sidebar-btn" onclick="togglePanel('calendarPanel'); loadCalendar();" id="btn-calendar">
+    📅<span class="btn-label">일정</span>
+  </button>
   <div class="sidebar-divider"></div>
   <button class="sidebar-btn" onclick="togglePanel('chatPanel')" id="btn-chat">
     💬<span class="btn-label">스타일 상담</span>
@@ -180,7 +183,25 @@
   <div class="resize-handle" data-dir="nw"></div>
 </div>
 
-<!-- ⑥ 채팅 패널 -->
+<!-- ⑥ 캘린더 패널 -->
+<div class="panel" id="calendarPanel">
+  <div class="panel-header">📅 오늘 일정
+    <button class="panel-close" onclick="closePanel('calendarPanel')">✕</button>
+  </div>
+  <div class="panel-body" id="calendarBody">
+    <p class="empty-msg" style="color:#aaa;">⏳ 일정 불러오는 중...</p>
+  </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
+</div>
+
+<!-- ⑦ 채팅 패널 -->
 <div class="panel" id="chatPanel">
   <div class="panel-header">💬 스타일 상담
     <button class="panel-close" onclick="closePanel('chatPanel')">✕</button>
@@ -265,6 +286,10 @@
 
 {% block scripts %}
 <script>
+  const userProfile = {
+    height: {{ profile.get('height', 165) | int if profile else 165 }},
+    weight: {{ profile.get('weight', 57)  | int if profile else 57  }},
+  };
   const chatContext = {
     tpo: "{{ profile.get('tpo', '일상') }}",
     wardrobe: [
@@ -383,6 +408,58 @@
   // ── 쇼핑 패널 — 별도 로드 ───────────────────────────────────────
   const TYPE_COLOR = { missing: '#e05080', upgrade: '#f0a030', trend: '#7755aa' };
   const TYPE_ICON  = { missing: '❗', upgrade: '⬆️', trend: '✨' };
+
+  // ── 캘린더 일정 로드 ──────────────────────────────────────────────
+  let _calendarLoaded = false;
+  function loadCalendar() {
+    if (_calendarLoaded) return;
+    _calendarLoaded = true;
+    const el = document.getElementById('calendarBody');
+    if (!el) return;
+
+    fetch('/api/calendar')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error && !data.events.length) {
+          el.innerHTML = `
+            <div style="text-align:center;padding:16px 8px;">
+              <div style="font-size:32px;margin-bottom:8px;">📅</div>
+              <p style="color:#aaa;font-size:13px;margin-bottom:12px;">구글 계정으로 로그인하면<br>오늘 일정을 자동으로 불러와요</p>
+              <a href="/auth/google" class="btn btn-primary btn-full">🔗 구글 캘린더 연동</a>
+            </div>`;
+          return;
+        }
+        if (!data.events || data.events.length === 0) {
+          el.innerHTML = '<p class="empty-msg" style="color:#aaa;">오늘 등록된 일정이 없어요 🙂</p>';
+          return;
+        }
+
+        let html = '';
+        if (data.auto_tpo) {
+          html += `<div style="background:rgba(160,176,255,0.15);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#a0b0ff;">
+            ✨ 오늘 TPO 자동 설정: <strong>${data.auto_tpo}</strong>
+          </div>`;
+        }
+        data.events.forEach(ev => {
+          const time = ev.start.includes('T')
+            ? new Date(ev.start).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})
+            : '종일';
+          const loc = ev.location ? `<span style="color:#888;font-size:11px;"> 📍${ev.location}</span>` : '';
+          html += `
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.07);">
+              <div style="min-width:38px;text-align:center;font-size:11px;color:#a0b0ff;font-weight:600;padding-top:2px;">${time}</div>
+              <div>
+                <div style="font-size:13px;color:#e0e8ff;">${ev.title}</div>
+                ${loc}
+              </div>
+            </div>`;
+        });
+        el.innerHTML = html;
+      })
+      .catch(() => {
+        if (el) el.innerHTML = '<p class="empty-msg">일정을 불러올 수 없어요.</p>';
+      });
+  }
 
   function loadShoppingCards() {
     fetch('/api/shopping')
@@ -788,21 +865,39 @@ const FADE = 0.5;
 // ── 의상 메쉬 참조 & 원본 재질 저장 ─────────────────────────
 // category → { mesh, origMat }
 const _clothRefs = {};
+let _bodyMesh = null;
 
 // GLB 내 메쉬 이름 후보 (카테고리별)
-// console에서 [Mesh] 로그 확인 후 맞는 이름으로 자동 매핑됨
 const CLOTH_MESH_CANDIDATES = {
-  '상의':   ['Ch22_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
-  '하의':   ['Ch22_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
-  '아우터': ['Ch22_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
-  '원피스': ['Ch22_Dress',  'Dress',  'dress',  'Body_Dress'],
+  '상의':   ['Cloth_Layer', 'Ch22_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
+  '하의':   ['Cloth_Layer', 'Ch22_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
+  '아우터': ['Cloth_Layer', 'Ch22_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
+  '원피스': ['Cloth_Layer', 'Ch22_Dress',  'Dress',  'dress',  'Body_Dress'],
 };
 
-// ── 옷 텍스처 교체 (방법A: 3D 메쉬에 사진 직접 적용) ─────────
+// ── UV 정면투영 ───────────────────────────────────────────────
+function _applyFrontProjectionUV(mesh) {
+  try {
+    const geo = mesh.geometry;
+    geo.computeBoundingBox();
+    const bbox = geo.boundingBox;
+    const w = bbox.max.x - bbox.min.x || 1;
+    const h = bbox.max.y - bbox.min.y || 1;
+    const pos = geo.attributes.position;
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uvs[i * 2]     = (pos.getX(i) - bbox.min.x) / w;
+      uvs[i * 2 + 1] = 1.0 - (pos.getY(i) - bbox.min.y) / h;
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.attributes.uv.needsUpdate = true;
+  } catch(e) { console.warn('[Cloth] UV 투영 실패:', e); }
+}
+
+// ── 옷 텍스처 교체 ────────────────────────────────────────────
 function _applyClothTexture(category, imgUrl) {
   const ref = _clothRefs[category];
   if (!ref) {
-    // 메쉬 없으면 HTML 오버레이 fallback
     console.warn('[Cloth] 메쉬 없음, 오버레이 사용:', category);
     _showOverlay(category, imgUrl);
     return;
@@ -812,14 +907,25 @@ function _applyClothTexture(category, imgUrl) {
     ? '/proxy/image?url=' + encodeURIComponent(imgUrl) : imgUrl;
 
   new THREE.TextureLoader().load(proxyUrl, (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    // 원래 재질의 속성을 유지하면서 텍스처만 교체
-    const newMat = ref.origMat.clone();
-    newMat.map = tex;
-    newMat.color.set(0xffffff);  // 원래 색상 대신 텍스처 색 그대로
-    newMat.needsUpdate = true;
+    tex.colorSpace  = THREE.SRGBColorSpace;
+    tex.flipY       = false;
+    tex.offset.set(0, 0);
+    tex.repeat.set(1, 1);
+    tex.needsUpdate = true;
+
+    if (ref.mesh.material) {
+      const oldMats = Array.isArray(ref.mesh.material)
+        ? ref.mesh.material : [ref.mesh.material];
+      oldMats.forEach(m => m?.dispose());
+    }
+
+    const newMat = new THREE.MeshStandardMaterial({
+      map: tex, transparent: false, side: THREE.FrontSide,
+      depthWrite: true, metalness: 0, roughness: 0.85,
+    });
     ref.mesh.material = newMat;
-    console.log(`[Cloth] ${category} 텍스처 적용 완료`);
+    if (ref.mesh.name === 'Cloth_Layer') ref.mesh.visible = true;
+    console.log(`[Cloth] ${category} 재질 교체 완료 (${ref.mesh.name})`);
   }, null, (err) => {
     console.error('[Cloth] 텍스처 로드 실패, 오버레이 fallback:', err);
     _showOverlay(category, imgUrl);
@@ -828,7 +934,10 @@ function _applyClothTexture(category, imgUrl) {
 
 function _resetClothTexture(category) {
   const ref = _clothRefs[category];
-  if (ref) ref.mesh.material = ref.origMat;  // 원본 재질 복원
+  if (ref) {
+    if (ref.mesh.name === 'Cloth_Layer') ref.mesh.visible = false;
+    else if (ref.origMat) ref.mesh.material = ref.origMat;
+  }
   _hideOverlay(category);
 }
 
@@ -870,42 +979,98 @@ gltfLoader.load(
     const model = gltf.scene;
     scene.add(model);
 
-    // ── 스케일 보정 ───────────────────────────────────────────────
+    // ── 스케일 보정 + 키/체중 체형 반영 ────────────────────────────
     model.updateMatrixWorld(true);
     {
       const tmpBox  = new THREE.Box3().setFromObject(model);
       const tmpSize = tmpBox.getSize(new THREE.Vector3());
-      if (tmpSize.y < 1)   { model.scale.setScalar(100); console.log('[Megan] 100배 스케일'); }
-      else if (tmpSize.y > 500) { model.scale.setScalar(0.1); console.log('[Megan] 0.1배 스케일'); }
+      let base = 1;
+      if (tmpSize.y < 1)    { base = 100; }
+      else if (tmpSize.y > 500) { base = 0.1; }
+
+      // 키/체중 → 체형 스케일 (기준: 165cm / 57kg)
+      const AVG_H = 165, AVG_W = 57;
+      const hRatio = userProfile.height / AVG_H;                   // 키 → Y축
+      const wRatio = 1 + (userProfile.weight / AVG_W - 1) * 0.35; // 체중 → X,Z축 (완만하게)
+
+      model.scale.set(base * wRatio, base * hRatio, base * wRatio);
+      console.log(`[Megan] 체형 반영 → 키:${userProfile.height}cm(x${hRatio.toFixed(2)}) 체중:${userProfile.weight}kg(x${wRatio.toFixed(2)})`);
     }
 
-    // ── 메쉬 이름 출력 + 의상 메쉬 매핑 ─────────────────────────
+    // ── 메쉬 이름 출력 + 의상 메쉬 매핑 (2-pass: Cloth_Layer 우선) ──
     const allMeshNames = [];
+    let clothLayerMesh = null;
     try {
+      // 1st pass: 이름 수집 + Cloth_Layer / _bodyMesh 탐색
       model.traverse(obj => {
         if (!obj.isMesh) return;
         allMeshNames.push(obj.name);
-        if (!obj.material) return;
-        for (const [cat, names] of Object.entries(CLOTH_MESH_CANDIDATES)) {
-          if (!_clothRefs[cat] && names.includes(obj.name)) {
-            try {
-              _clothRefs[cat] = {
-                mesh: obj,
-                origMat: Array.isArray(obj.material)
-                  ? obj.material.map(m => m.clone())
-                  : obj.material.clone(),
-              };
-            } catch (e) { /* ignore */ }
-          }
-        }
+        if (obj.name === 'Cloth_Layer') clothLayerMesh = obj;
+        if (obj.name === 'Ch22_Body')   _bodyMesh = obj;
       });
-    } catch (e) { /* ignore */ }
-    console.log('[Megan] 전체 메쉬 목록:', allMeshNames);
 
-    // ── GLB PBR 재질 보정: 반짝임 제거 ──────────────────────────
+      // 2nd pass: Cloth_Layer 있으면 모든 카테고리를 그것으로 연결
+      if (clothLayerMesh) {
+        for (const cat of Object.keys(CLOTH_MESH_CANDIDATES)) {
+          _clothRefs[cat] = { mesh: clothLayerMesh, origMat: null };
+        }
+        console.log('[Cloth] Cloth_Layer 발견 → 모든 카테고리 연결');
+      } else {
+        // fallback: Ch22_Shirt / Ch22_Pants 등 개별 메쉬 매핑
+        model.traverse(obj => {
+          if (!obj.isMesh || !obj.material) return;
+          for (const [cat, names] of Object.entries(CLOTH_MESH_CANDIDATES)) {
+            if (!_clothRefs[cat] && names.includes(obj.name)) {
+              try {
+                _clothRefs[cat] = {
+                  mesh: obj,
+                  origMat: Array.isArray(obj.material)
+                    ? obj.material.map(m => m.clone())
+                    : obj.material.clone(),
+                };
+              } catch (e) { /* ignore */ }
+            }
+          }
+        });
+        console.log('[Cloth] Cloth_Layer 없음 → 개별 메쉬 fallback');
+      }
+    } catch (e) { /* ignore */ }
+    console.log('[Megan] 전체 메쉬 목록:', allMeshNames.length, allMeshNames);
+
+    // ── GLB PBR 재질 보정: 반짝임 제거 + 의상 베이지 기본색 + 머리카락 투명도 ──
     model.traverse(obj => {
       if (!obj.isMesh) return;
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+
+      // 의상 메쉬: UV 정면투영 + 베이지 중립색 (Cloth_Layer는 숨김)
+      const clothMeshNames = ['Cloth_Layer', 'Ch22_Shirt', 'Ch22_Pants', 'Ch22_Jacket', 'Ch22_Dress'];
+      if (clothMeshNames.includes(obj.name)) {
+        _applyFrontProjectionUV(obj);
+        if (obj.name === 'Cloth_Layer') {
+          obj.visible = false;   // 텍스처 입히기 전까지 숨김
+        } else {
+          obj.material = new THREE.MeshStandardMaterial({
+            color: 0xd8cfc4, metalness: 0, roughness: 0.9,
+          });
+        }
+        return;
+      }
+
+      // 머리카락 / 속눈썹: 알파 투명도 처리
+      if (obj.name === 'Ch22_Hair' || obj.name === 'Ch22_Eyelashes') {
+        mats.forEach(mat => {
+          if (!mat) return;
+          mat.transparent = true;
+          mat.alphaTest   = 0.3;
+          mat.side        = THREE.DoubleSide;
+          mat.depthWrite  = false;
+          mat.metalness   = 0;
+          mat.roughness   = 0.85;
+          mat.needsUpdate = true;
+        });
+        return;
+      }
+
       mats.forEach(mat => {
         if (!mat) return;
         mat.metalness = 0;
@@ -1034,6 +1199,259 @@ let t = 0;
     camera.lookAt(0, c.lookAtY, 0);
   }
   renderer.render(scene, camera);
+}
+)();
+</script>
+
+<!-- ── 음성 어시스턴트 WebSocket + Web Speech API ── -->
+<style>
+  #voiceMicBtn.voice-on {
+    background: #22c55e !important;
+    box-shadow: 0 0 0 3px rgba(34,197,94,0.35);
+    animation: mic-pulse 1.6s infinite;
+  }
+  #voiceMicBtn.voice-off {
+    background: #e05080 !important;
+    box-shadow: none;
+    animation: none;
+  }
+  @keyframes mic-pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+    50%      { box-shadow: 0 0 0 9px rgba(34,197,94,0); }
+  }
+  .voice-log-user      { text-align:right; color:#a0b0ff; font-size:13px; margin:4px 0; }
+  .voice-log-assistant { text-align:left;  color:#c9d1e8; font-size:13px; margin:4px 0; }
+</style>
+<script>
+(function () {
+  'use strict';
+
+  // ── Chrome 지원 체크 ────────────────────────────────────────────
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const micBtnOld = document.getElementById('voiceMicBtn');
+  if (!micBtnOld) return;
+
+  if (!SR) {
+    micBtnOld.addEventListener('click', function () {
+      const st = document.getElementById('voiceStatus');
+      if (st) st.textContent = '이 기능은 Chrome 브라우저에서만 지원됩니다';
+    });
+    return;
+  }
+
+  // voice.js의 기존 리스너 제거: 버튼 노드를 복제·교체
+  const micBtn = micBtnOld.cloneNode(true);
+  micBtnOld.parentNode.replaceChild(micBtn, micBtnOld);
+
+  // ── 상태 변수 ──────────────────────────────────────────────────
+  let inVoice      = false;
+  let serverState  = 'idle';   // idle | listening | processing | speaking
+  let ws           = null;
+  let recognition  = null;
+  let reconnTimer  = null;
+
+  // ── 오디오 재생 ────────────────────────────────────────────────
+  const OUT_SR    = 24000;
+  let playCtx     = null;
+  let nextPlay    = 0;
+  let playSources = [];
+
+  function ensurePlayCtx() {
+    if (!playCtx || playCtx.state === 'closed') {
+      playCtx = new AudioContext({ sampleRate: OUT_SR });
+      nextPlay = 0; playSources = [];
+    }
+    if (playCtx.state === 'suspended') playCtx.resume();
+  }
+
+  function enqueuePCM(b64) {
+    ensurePlayCtx();
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const i16   = new Int16Array(bytes.buffer);
+    if (!i16.length) return;
+    const f32 = new Float32Array(i16.length);
+    for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
+    const buf = playCtx.createBuffer(1, f32.length, OUT_SR);
+    buf.getChannelData(0).set(f32);
+    const src = playCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(playCtx.destination);
+    const when = Math.max(nextPlay, playCtx.currentTime + 0.01);
+    src.start(when);
+    nextPlay = when + buf.duration;
+    playSources.push(src);
+    src.onended = () => { playSources = playSources.filter(s => s !== src); };
+  }
+
+  function stopAudio() {
+    for (const s of playSources) { try { s.stop(0); } catch (_) {} }
+    playSources = [];
+    if (playCtx) nextPlay = playCtx.currentTime;
+  }
+
+  // ── UI 업데이트 ────────────────────────────────────────────────
+  const statusEl = document.getElementById('voiceStatus');
+  const waveEl   = document.getElementById('voiceSpeakWave');
+  const chatLog  = document.getElementById('voiceChatLog');
+
+  function updateUI(s) {
+    const labels = {
+      off:        '마이크가 꺼져 있어요',
+      listening:  '듣는 중...',
+      processing: '생각하는 중...',
+      speaking:   '말하는 중...',
+    };
+    if (statusEl) statusEl.textContent = labels[s] ?? labels.off;
+    if (waveEl)   waveEl.style.display = s === 'speaking' ? 'flex' : 'none';
+    micBtn.classList.toggle('voice-on',  inVoice);
+    micBtn.classList.toggle('voice-off', !inVoice);
+  }
+
+  function addLog(text, role) {
+    if (!chatLog || !text) return;
+    chatLog.style.display = 'block';
+    const div = document.createElement('div');
+    div.className   = 'voice-log-' + role;
+    div.textContent = text;
+    chatLog.appendChild(div);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  // ── 컨텍스트 빌드 ──────────────────────────────────────────────
+  function buildCtx() {
+    const c = (typeof chatContext !== 'undefined') ? chatContext : {};
+    return {
+      wardrobe:      c.wardrobe       || [],
+      weather_label: c.weather_label  || '',
+    };
+  }
+
+  // ── WebSocket ──────────────────────────────────────────────────
+  function connectWS() {
+    const url = `ws://${location.host}/voice/ws`;
+    ws = new WebSocket(url);
+
+    ws.onopen = () => {
+      if (inVoice) {
+        ws.send(JSON.stringify({ type: 'start_conversation', context: buildCtx() }));
+      }
+    };
+
+    ws.onmessage = ({ data }) => {
+      const msg = JSON.parse(data);
+
+      if (msg.type === 'state') {
+        serverState = msg.value;
+        if (msg.value === 'listening') {
+          updateUI('listening');
+          startRecognition();
+        } else if (msg.value === 'processing') {
+          updateUI('processing');
+        } else if (msg.value === 'speaking') {
+          updateUI('speaking');
+        }
+      } else if (msg.type === 'audio_chunk') {
+        enqueuePCM(msg.data);
+      } else if (msg.type === 'response_text') {
+        addLog(msg.text, 'assistant');
+      } else if (msg.type === 'error') {
+        addLog('오류: ' + msg.message, 'assistant');
+        if (inVoice) { serverState = 'listening'; updateUI('listening'); startRecognition(); }
+      }
+      // ping·done: 무시
+    };
+
+    ws.onerror = () => ws.close();
+    ws.onclose = () => {
+      if (inVoice) reconnTimer = setTimeout(connectWS, 3000);
+    };
+  }
+
+  // ── Web Speech API ─────────────────────────────────────────────
+  function setupRecognition() {
+    recognition = new SR();
+    recognition.lang            = 'ko-KR';
+    recognition.continuous      = false;
+    recognition.interimResults  = false;
+
+    // 말 시작 감지 → barge-in (TTS 재생 중일 때)
+    recognition.onspeechstart = () => {
+      if (serverState === 'speaking') {
+        stopAudio();
+        if (ws?.readyState === WebSocket.OPEN)
+          ws.send(JSON.stringify({ type: 'barge_in' }));
+        serverState = 'listening';
+        updateUI('listening');
+      }
+    };
+
+    // 인식 완료 → user_text 전송
+    recognition.onresult = (e) => {
+      const text = e.results[0][0].transcript.trim();
+      if (!text) return;
+      addLog(text, 'user');
+      if (ws?.readyState === WebSocket.OPEN)
+        ws.send(JSON.stringify({ type: 'user_text', text }));
+    };
+
+    // 인식 종료 → listening 상태면 재시작
+    recognition.onend = () => {
+      if (inVoice && serverState === 'listening') startRecognition();
+    };
+
+    // no-speech 오류: 재시작 / 그 외: 무시
+    recognition.onerror = (e) => {
+      if (e.error === 'no-speech' && inVoice && serverState === 'listening')
+        startRecognition();
+    };
+  }
+
+  function startRecognition() {
+    if (!recognition || !inVoice) return;
+    try { recognition.start(); } catch (_) {}
+  }
+
+  // ── ON / OFF 토글 ──────────────────────────────────────────────
+  micBtn.addEventListener('click', () => {
+    if (!inVoice) {
+      // ── 마이크 ON ──────────────────────────────────────────
+      inVoice     = true;
+      serverState = 'listening';
+      updateUI('listening');
+      chatLog && (chatLog.style.display = 'block');
+
+      setupRecognition();
+      connectWS();
+      // ws.onopen에서 start_conversation 전송 + startRecognition 호출됨
+
+    } else {
+      // ── 마이크 OFF ─────────────────────────────────────────
+      inVoice     = false;
+      serverState = 'idle';
+      updateUI('off');
+
+      if (recognition) { try { recognition.stop(); } catch (_) {} recognition = null; }
+      stopAudio();
+
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'end_conversation' }));
+        ws.close();
+      }
+      ws = null;
+      if (reconnTimer) { clearTimeout(reconnTimer); reconnTimer = null; }
+    }
+  });
+
+  // 초기 버튼 상태 설정
+  updateUI('off');
+
+  // ── 모바일: 화면 복귀 시 재연결 ───────────────────────────────
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && inVoice && ws?.readyState !== WebSocket.OPEN) {
+      if (reconnTimer) clearTimeout(reconnTimer);
+      connectWS();
+    }
+  });
 })();
 </script>
 {% endblock %}

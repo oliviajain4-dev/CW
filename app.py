@@ -32,7 +32,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -117,7 +117,10 @@ if _GOOGLE_ENABLED:
         client_id=os.getenv("GOOGLE_CLIENT_ID"),
         client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
+        client_kwargs={
+            "scope": "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+            "access_type": "online",
+        },
     )
 
 # ── 상수 ─────────────────────────────────────────────────────────
@@ -547,10 +550,30 @@ async def auth_google_callback(request: Request):
             row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (str(user_id),))
 
     request.session["user_id"] = str(row["id"])
+    # 캘린더 접근용 access_token 세션 저장
+    try:
+        access_token: str | None = token["access_token"]  # type: ignore[index]
+    except Exception:
+        access_token = None
+    if access_token:
+        request.session["google_access_token"] = access_token
     if not row.get("gender"):
         flash(request, f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
         return RedirectResponse("/profile", status_code=302)
     return RedirectResponse("/", status_code=302)
+
+
+@app.get("/api/calendar", name="api_calendar")
+async def api_calendar(request: Request):
+    """오늘 구글 캘린더 일정 반환. 구글 로그인 필요."""
+    _require_user(request)
+    access_token = request.session.get("google_access_token")
+    if not access_token:
+        return JSONResponse({"events": [], "error": "구글 로그인 필요"}, status_code=200)
+    from chatbot.calendar_client import get_today_events, tpo_from_events
+    events = get_today_events(access_token)
+    auto_tpo = tpo_from_events(events)
+    return JSONResponse({"events": events, "auto_tpo": auto_tpo})
 
 
 @app.get("/logout", name="logout")
@@ -910,10 +933,21 @@ async def api_recommend(request: Request, quick: bool = False):
             for it in all_items
         ]
 
+        # 캘린더 일정 가져오기 (구글 로그인 시에만)
+        calendar_events: "list[dict]" = []
+        g_token = request.session.get("google_access_token")
+        if g_token:
+            from chatbot.calendar_client import get_today_events, tpo_from_events  # type: ignore[import]
+            _evs: "list[dict]" = await asyncio.to_thread(get_today_events, g_token)  # type: ignore[arg-type]
+            calendar_events = _evs
+            _detected: "str | None" = tpo_from_events(_evs)  # type: ignore[arg-type]
+            if _detected:
+                tpo = _detected
+
         trend_news = await asyncio.to_thread(get_fashion_news, style_pref)
         outfit_result = await asyncio.to_thread(
-            get_outfit_comment, weather, style_rec, layering, tpo,
-            profile or None, wardrobe_for_ai, trend_news
+            get_outfit_comment, weather, style_rec, layering, str(tpo),  # type: ignore[arg-type]
+            profile or None, wardrobe_for_ai, trend_news, calendar_events
         )
         comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
         bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
