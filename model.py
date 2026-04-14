@@ -79,6 +79,20 @@ outer_labels = [
     "trench coat", "leather jacket", "denim jacket", "bomber jacket", "no outer"
 ]
 
+# ── 통합 분류 테이블 ─────────────────────────────
+# 기존 방식 버그: 그룹별 독립 softmax → 라벨 수가 적은 그룹이 항상 높은 확률
+# (하의 9개 vs 상의 10개 → 하의 uniform max = 1/9 > 상의 1/10 → 하의 편향)
+# 수정: 모든 라벨을 하나의 softmax로 비교 → argmax = 전체에서 가장 유사한 라벨
+_outer_clf  = [l for l in outer_labels if l != "no outer"]  # 9개
+_dress_clf  = [l for l in dress_labels if l != "no dress"]  # 7개
+_ALL_CLF_LABELS: list[str] = _outer_clf + _dress_clf + top_labels + bottom_labels  # 총 35개
+
+_LABEL_TO_CAT: dict[str, str] = {}
+for _l in _outer_clf:    _LABEL_TO_CAT[_l] = "아우터"
+for _l in _dress_clf:    _LABEL_TO_CAT[_l] = "원피스"
+for _l in top_labels:    _LABEL_TO_CAT[_l] = "상의"
+for _l in bottom_labels: _LABEL_TO_CAT[_l] = "하의"
+
 # ── 두께 / 질감 매핑 ────────────────────────────
 # 카테고리로 두께·질감 추론
 # 나중에 날씨 API 연동할 때 체감온도 계산에 활용
@@ -168,41 +182,20 @@ def analyze_outfit(image_path, remove_bg=True):
         image_features = _model.encode_image(tensor)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        # ── 각 그룹별 최고 확률 예측 (텍스트 임베딩 캐시) ──
-        def get_score(part, labels):
-            if part not in _text_features_cache:
-                text  = _tokenizer(labels)  # type: ignore[operator]
-                feats = _model.encode_text(text)  # type: ignore[operator]
-                feats = feats / feats.norm(dim=-1, keepdim=True)
-                _text_features_cache[part] = feats
-            feats = _text_features_cache[part]
-            probs = (image_features @ feats.T).softmax(dim=-1)
-            return labels[probs.argmax()], probs.max().item()
+        # ── 통합 softmax로 카테고리 결정 ───────────────────────────────
+        # 35개 라벨 전체를 하나의 softmax → argmax = 가장 유사한 라벨
+        if "all_clf" not in _text_features_cache:
+            tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
+            feats  = _model.encode_text(tokens)   # type: ignore[operator]
+            feats  = feats / feats.norm(dim=-1, keepdim=True)
+            _text_features_cache["all_clf"] = feats
 
-        outer_pred, outer_prob   = get_score("아우터", outer_labels)
-        dress_pred, dress_prob   = get_score("원피스", dress_labels)
-        top_pred,   top_prob     = get_score("상의",   top_labels)
-        bottom_pred, bottom_prob = get_score("하의",   bottom_labels)
+        all_feats = _text_features_cache["all_clf"]
+        all_probs = (image_features @ all_feats.T).softmax(dim=-1)[0]  # (35,)
+        best_idx  = int(all_probs.argmax())
 
-        # ── 카테고리 결정 우선순위 ──────────────────
-        # 1순위: 아우터 (확률 > 0.5 이고 no outer 아님)
-        # 2순위: 원피스 (dress 계열 확률 > 0.6 이고 no dress 아님)
-        # 3순위: 상의/하의 중 확률 높은 것
-        has_outer = (outer_pred != "no outer" and outer_prob > 0.5)
-        has_dress = (dress_pred != "no dress" and dress_prob > 0.6)
-
-        if has_outer:
-            final_category = "아우터"
-            final_item     = outer_pred
-        elif has_dress:
-            final_category = "원피스"
-            final_item     = dress_pred
-        elif top_prob >= bottom_prob:
-            final_category = "상의"
-            final_item     = top_pred
-        else:
-            final_category = "하의"
-            final_item     = bottom_pred
+        final_item     = _ALL_CLF_LABELS[best_idx]
+        final_category = _LABEL_TO_CAT[final_item]
 
         info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
         result[final_category] = {
@@ -235,48 +228,26 @@ def analyze_outfit_batch(image_paths: list) -> list:
 
     results = []
     with torch.no_grad():  # type: ignore[attr-defined]
-        # 핵심: N장을 한 번의 forward pass로 처리
+        # N장을 한 번의 forward pass로 처리
         image_features = _model.encode_image(batch)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        # 텍스트 임베딩 (캐시 — 최초 1회만 계산)
-        def get_feats(part, labels):
-            if part not in _text_features_cache:
-                text  = _tokenizer(labels)  # type: ignore[operator]
-                feats = _model.encode_text(text)  # type: ignore[operator]
-                feats = feats / feats.norm(dim=-1, keepdim=True)
-                _text_features_cache[part] = feats
-            return _text_features_cache[part]
+        # 통합 텍스트 임베딩 캐시 (35개 라벨, 최초 1회만 계산)
+        if "all_clf" not in _text_features_cache:
+            tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
+            feats  = _model.encode_text(tokens)   # type: ignore[operator]
+            feats  = feats / feats.norm(dim=-1, keepdim=True)
+            _text_features_cache["all_clf"] = feats
 
-        outer_feats  = get_feats("아우터", outer_labels)
-        dress_feats  = get_feats("원피스", dress_labels)
-        top_feats    = get_feats("상의",   top_labels)
-        bottom_feats = get_feats("하의",   bottom_labels)
+        all_feats = _text_features_cache["all_clf"]  # (35, D)
+
+        # 한 번에 N×35 유사도 계산
+        all_probs = (image_features @ all_feats.T).softmax(dim=-1)  # (N, 35)
 
         for i in range(len(image_paths)):
-            feat = image_features[i:i+1]  # (1, D)
-
-            outer_probs  = (feat @ outer_feats.T).softmax(dim=-1)
-            dress_probs  = (feat @ dress_feats.T).softmax(dim=-1)
-            top_probs    = (feat @ top_feats.T).softmax(dim=-1)
-            bottom_probs = (feat @ bottom_feats.T).softmax(dim=-1)
-
-            outer_pred  = outer_labels[outer_probs.argmax()]
-            dress_pred  = dress_labels[dress_probs.argmax()]
-            top_pred    = top_labels[top_probs.argmax()]
-            bottom_pred = bottom_labels[bottom_probs.argmax()]
-
-            has_outer = (outer_pred != "no outer" and outer_probs.max().item() > 0.5)
-            has_dress = (dress_pred != "no dress" and dress_probs.max().item() > 0.6)
-
-            if has_outer:
-                final_category, final_item = "아우터", outer_pred
-            elif has_dress:
-                final_category, final_item = "원피스", dress_pred
-            elif top_probs.max().item() >= bottom_probs.max().item():
-                final_category, final_item = "상의", top_pred
-            else:
-                final_category, final_item = "하의", bottom_pred
+            best_idx       = int(all_probs[i].argmax())
+            final_item     = _ALL_CLF_LABELS[best_idx]
+            final_category = _LABEL_TO_CAT[final_item]
 
             info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
             results.append({
