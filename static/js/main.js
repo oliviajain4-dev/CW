@@ -107,6 +107,7 @@ function initDraggable(panel) {
 /* ── 캐릭터 옷 입히기 ───────────────────────── */
 const wornItems = { 상의: null, 하의: null, 아우터: null, 원피스: null };
 
+
 function wearItem(el) {
   const category = el.dataset.category;
   const src      = el.dataset.src;
@@ -122,6 +123,7 @@ function wearItem(el) {
       dressImg.src = '';
       el.classList.remove('worn');
       wornItems['원피스'] = null;
+      if (window.meganResetColor) window.meganResetColor('원피스');
       return;
     }
     // 이전 원피스 해제
@@ -138,6 +140,7 @@ function wearItem(el) {
     dressImg.style.display = 'block';
     el.classList.add('worn');
     wornItems['원피스'] = el;
+    if (window.meganApplyTexture) window.meganApplyTexture('원피스', src, el.dataset.texture || 'cotton');
     return;
   }
 
@@ -151,6 +154,7 @@ function wearItem(el) {
     if (dressImg) { dressImg.style.display = 'none'; dressImg.src = ''; }
     wornItems['원피스'].classList.remove('worn');
     wornItems['원피스'] = null;
+    if (window.meganResetColor) window.meganResetColor('원피스');
   }
 
   // 같은 아이템 다시 누르면 탈착
@@ -159,6 +163,7 @@ function wearItem(el) {
     imgEl.src = '';
     el.classList.remove('worn');
     wornItems[category] = null;
+    if (window.meganResetColor) window.meganResetColor(category);
     return;
   }
 
@@ -169,6 +174,7 @@ function wearItem(el) {
   imgEl.style.display = 'block';
   el.classList.add('worn');
   wornItems[category] = el;
+  if (window.meganApplyTexture) window.meganApplyTexture(category, src, el.dataset.texture || 'cotton');
 }
 
 /* ── 패널 토글 ──────────────────────────────── */

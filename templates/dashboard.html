@@ -33,18 +33,15 @@
   <!-- 바닥 그림자 — character-figure 바깥에서 독립 애니메이션 -->
   <div class="char-shadow"></div>
 
-  <!-- 코디 팁 말풍선 (캐릭터 오른쪽) -->
-  <div class="voice-tip-bubble" id="voiceTip0" style="display:none; left:calc(50% + 100px); bottom:42%;"></div>
-  <div class="voice-tip-bubble" id="voiceTip1" style="display:none; left:calc(50% + 110px); bottom:28%;"></div>
-  <div class="voice-tip-bubble" id="voiceTip2" style="display:none; left:calc(50% + 95px);  bottom:15%;"></div>
-
   <!-- 3D 메간 캐릭터 -->
   <div class="megan-wrapper">
-    <div class="char-bubble">
-      {% if profile.get('name') %}{{ profile['name'] }}님, 오늘도 예쁘게!{% else %}오늘 코디 골라볼까요?{% endif %}
-    </div>
     <div id="meganLoading" class="megan-loading">✨ 불러오는 중...</div>
     <canvas id="meganCanvas"></canvas>
+    <!-- 의상 오버레이 (3D 메쉬 위에 실제 옷 이미지 올리기) -->
+    <img id="charOverlay_상의"   class="char-cloth-overlay" src="" alt="" style="top:22%;height:31%;">
+    <img id="charOverlay_하의"   class="char-cloth-overlay" src="" alt="" style="top:50%;height:37%;">
+    <img id="charOverlay_아우터" class="char-cloth-overlay" src="" alt="" style="top:18%;height:38%;">
+    <img id="charOverlay_원피스" class="char-cloth-overlay" src="" alt="" style="top:22%;height:56%;">
   </div>
 
   <!-- JS 호환용 숨김 요소 (main.js wearItem 참조) — 나중에 3D 옷 입히기로 교체 예정 -->
@@ -119,6 +116,8 @@
            title="{{ item['item_type'] }}"
            data-id="{{ item['id'] }}"
            data-category="{{ item['category'] }}"
+           data-texture="{{ item.get('texture', 'cotton') }}"
+           data-item-type="{{ item['item_type'] }}"
            {% if item['image_path'] %}data-src="{{ item['image_path'] | img_url }}"{% endif %}
            onclick="wearItem(this)">
         {% if item['image_path'] %}
@@ -497,10 +496,10 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-const CANVAS_W = 340;
-const CANVAS_H = 520;
+const CANVAS_W = 480;
+const CANVAS_H = 720;
 
 const canvas = document.getElementById('meganCanvas');
 canvas.width  = CANVAS_W;
@@ -511,10 +510,10 @@ renderer.setSize(CANVAS_W, CANVAS_H);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-const scene = new THREE.Scene();
+const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, CANVAS_W / CANVAS_H, 1, 10000);
 
-// 조명 (패션 촬영 스타일)
+// 조명
 scene.add(new THREE.AmbientLight(0xffeedd, 2.2));
 const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
 keyLight.position.set(1.5, 3, 2);
@@ -524,49 +523,241 @@ fillLight.position.set(-2, 1, -1);
 scene.add(fillLight);
 
 let mixer = null;
-const clock = new THREE.Clock();
+const clock      = new THREE.Clock();
+const gltfLoader = new GLTFLoader();
 
-// FBX 로드
-const loader = new FBXLoader();
-loader.load(
-  '/static/models/megan.fbx',
-  (fbx) => {
-    scene.add(fbx);
+// ── 애니메이션 상태 ───────────────────────────────────────────
+let _animReady   = false;
+let _animPlaying = false;
+let _animActions = [];
+let _animCurrent = 0;
+const FADE = 0.5;
 
-    // 바운딩 박스로 자동 카메라 조정
-    const box  = new THREE.Box3().setFromObject(fbx);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
+// ── 의상 메쉬 참조 & 원본 재질 저장 ─────────────────────────
+// category → { mesh, origMat }
+const _clothRefs = {};
 
-    // 발을 바닥(y=0)에 맞추고 좌우 중앙 정렬
-    fbx.position.set(-center.x, -box.min.y, -center.z);
+// GLB 내 메쉬 이름 후보 (카테고리별)
+// console에서 [Mesh] 로그 확인 후 맞는 이름으로 자동 매핑됨
+const CLOTH_MESH_CANDIDATES = {
+  '상의':   ['Ch22_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
+  '하의':   ['Ch22_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
+  '아우터': ['Ch22_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
+  '원피스': ['Ch22_Dress',  'Dress',  'dress',  'Body_Dress'],
+};
 
-    // 가로/세로 모두 고려해서 캐릭터 전체가 나오도록 카메라 거리 계산
-    const fovRad  = (camera.fov * Math.PI) / 180;
-    const hFovRad = 2 * Math.atan(Math.tan(fovRad / 2) * (CANVAS_W / CANVAS_H));
-    const distH   = (size.y * 0.6) / Math.tan(fovRad  / 2);   // 세로 기준
-    const distW   = (size.x * 0.6) / Math.tan(hFovRad / 2);   // 가로(팔 포함) 기준
-    const dist    = Math.max(distH, distW) * 1.15;             // 더 먼 쪽 선택 + 여백
-    camera.position.set(0, size.y * 0.48, dist);
-    camera.lookAt(0, size.y * 0.48, 0);
+// ── 옷 텍스처 교체 (방법A: 3D 메쉬에 사진 직접 적용) ─────────
+function _applyClothTexture(category, imgUrl) {
+  const ref = _clothRefs[category];
+  if (!ref) {
+    // 메쉬 없으면 HTML 오버레이 fallback
+    console.warn('[Cloth] 메쉬 없음, 오버레이 사용:', category);
+    _showOverlay(category, imgUrl);
+    return;
+  }
 
-    // 애니메이션 클립이 포함된 FBX면 자동 재생
-    if (fbx.animations && fbx.animations.length > 0) {
-      mixer = new THREE.AnimationMixer(fbx);
-      mixer.clipAction(fbx.animations[0]).play();
+  const proxyUrl = imgUrl?.startsWith('https://res.cloudinary.com/')
+    ? '/proxy/image?url=' + encodeURIComponent(imgUrl) : imgUrl;
+
+  new THREE.TextureLoader().load(proxyUrl, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // 원래 재질의 속성을 유지하면서 텍스처만 교체
+    const newMat = ref.origMat.clone();
+    newMat.map = tex;
+    newMat.color.set(0xffffff);  // 원래 색상 대신 텍스처 색 그대로
+    newMat.needsUpdate = true;
+    ref.mesh.material = newMat;
+    console.log(`[Cloth] ${category} 텍스처 적용 완료`);
+  }, null, (err) => {
+    console.error('[Cloth] 텍스처 로드 실패, 오버레이 fallback:', err);
+    _showOverlay(category, imgUrl);
+  });
+}
+
+function _resetClothTexture(category) {
+  const ref = _clothRefs[category];
+  if (ref) ref.mesh.material = ref.origMat;  // 원본 재질 복원
+  _hideOverlay(category);
+}
+
+// ── HTML 오버레이 fallback ────────────────────────────────────
+function _showOverlay(category, imgUrl) {
+  const el = document.getElementById('charOverlay_' + category);
+  if (!el || !imgUrl) return;
+  el.src = imgUrl;
+  el.style.display = 'block';
+}
+function _hideOverlay(category) {
+  const el = document.getElementById('charOverlay_' + category);
+  if (el) { el.style.display = 'none'; el.src = ''; }
+}
+
+// ── 애니메이션 트리거 ─────────────────────────────────────────
+function _triggerAnim() {
+  if (!_animReady || _animPlaying || !_animActions.length) return;
+  _animPlaying = true;
+  _animCurrent = 0;
+  if (window._meganCam) window._meganCam.target = window._meganCam._distAction1;
+  _animActions[0].paused = false;
+  _animActions[0].reset().play();
+}
+
+// ── 외부 API ─────────────────────────────────────────────────
+window.meganApplyTexture = function(category, imgUrl) {
+  _applyClothTexture(category, imgUrl);
+  _triggerAnim();
+};
+window.meganResetColor = function(category) {
+  _resetClothTexture(category);
+};
+
+// ── GLB 캐릭터 로드 ──────────────────────────────────────────
+gltfLoader.load(
+  '/static/models/megan.glb',
+  (gltf) => {
+    const model = gltf.scene;
+    scene.add(model);
+
+    // ── 스케일 보정 ───────────────────────────────────────────────
+    model.updateMatrixWorld(true);
+    {
+      const tmpBox  = new THREE.Box3().setFromObject(model);
+      const tmpSize = tmpBox.getSize(new THREE.Vector3());
+      if (tmpSize.y < 1)   { model.scale.setScalar(100); console.log('[Megan] 100배 스케일'); }
+      else if (tmpSize.y > 500) { model.scale.setScalar(0.1); console.log('[Megan] 0.1배 스케일'); }
     }
 
-    document.getElementById('meganLoading')?.remove();
+    // ── 메쉬 이름 출력 + 의상 메쉬 매핑 ─────────────────────────
+    const allMeshNames = [];
+    try {
+      model.traverse(obj => {
+        if (!obj.isMesh) return;
+        allMeshNames.push(obj.name);
+        if (!obj.material) return;
+        for (const [cat, names] of Object.entries(CLOTH_MESH_CANDIDATES)) {
+          if (!_clothRefs[cat] && names.includes(obj.name)) {
+            try {
+              _clothRefs[cat] = {
+                mesh: obj,
+                origMat: Array.isArray(obj.material)
+                  ? obj.material.map(m => m.clone())
+                  : obj.material.clone(),
+              };
+            } catch (e) { /* ignore */ }
+          }
+        }
+      });
+    } catch (e) { /* ignore */ }
+    console.log('[Megan] 전체 메쉬 목록:', allMeshNames);
+
+    // ── GLB PBR 재질 보정: 반짝임 제거 ──────────────────────────
+    model.traverse(obj => {
+      if (!obj.isMesh) return;
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      mats.forEach(mat => {
+        if (!mat) return;
+        mat.metalness = 0;
+        mat.roughness = 0.85;
+        mat.needsUpdate = true;
+      });
+    });
+
+    // ── 실제 Bone 월드 좌표로 캐릭터 위치 파악 ──────────────────
+    // SkinnedMesh bbox는 bind-pose와 달라서 bone 위치로 직접 계산
+    model.updateMatrixWorld(true);
+    let boneMinY = Infinity, boneMaxY = -Infinity, boneMinX = 0, boneMaxX = 0;
+    model.traverse(obj => {
+      if (!obj.isBone) return;
+      const v = new THREE.Vector3();
+      obj.getWorldPosition(v);
+      if (v.y < boneMinY) boneMinY = v.y;
+      if (v.y > boneMaxY) boneMaxY = v.y;
+      if (v.x < boneMinX) boneMinX = v.x;
+      if (v.x > boneMaxX) boneMaxX = v.x;
+    });
+
+    // bone 없으면 bounding box fallback
+    if (!isFinite(boneMinY)) {
+      const fb = new THREE.Box3().setFromObject(model);
+      boneMinY = fb.min.y; boneMaxY = fb.max.y;
+    }
+
+    const charHeight = boneMaxY - boneMinY;
+    const boneCenterX = (boneMinX + boneMaxX) / 2;
+    console.log('[Megan] Bone Y범위:', boneMinY.toFixed(1), '~', boneMaxY.toFixed(1),
+                '/ 키:', charHeight.toFixed(1));
+
+    // 발이 y=0 오도록 model 이동
+    model.position.y -= boneMinY;
+    model.position.x -= boneCenterX;
+
+    // ── 카메라 설정 ───────────────────────────────────────────────
+    const fovRad    = (camera.fov * Math.PI) / 180;
+    const dist      = (charHeight * 0.75) / Math.tan(fovRad / 2);  // 더 멀리
+    const DIST_ACTION1  = dist * 1.1;
+    const DIST_ACTION23 = dist * 0.85;
+    const lookAtY       = charHeight * 0.38;   // 시선 낮춰서 머리 안 잘리게
+
+    window._meganCam = {
+      target: DIST_ACTION1, current: DIST_ACTION1, lookAtY,
+      _distAction1: DIST_ACTION1, _distAction23: DIST_ACTION23,
+    };
+    camera.position.set(0, lookAtY, DIST_ACTION1);
+    camera.lookAt(0, lookAtY, 0);
+    console.log('[Megan] 카메라 → lookAtY:', lookAtY.toFixed(1), '/ dist:', DIST_ACTION1.toFixed(1));
+
+    mixer = new THREE.AnimationMixer(model);
+
+    // GLB 애니메이션 클립 로드
+    const loadClip = (url) => new Promise((resolve, reject) =>
+      gltfLoader.load(url,
+        g => g.animations?.length ? resolve(g.animations[0]) : reject(new Error('클립 없음: ' + url)),
+        null, reject)
+    );
+
+    Promise.all([
+      loadClip('/static/models/megan_action1.glb'),
+      loadClip('/static/models/megan_action2.glb'),
+      loadClip('/static/models/megan_action3.glb'),
+    ]).then(([c1, c2, c3]) => {
+      _animActions = [
+        mixer.clipAction(c1),
+        mixer.clipAction(c2),
+        mixer.clipAction(c3),
+      ];
+      _animActions.forEach(a => { a.clampWhenFinished = true; a.loop = THREE.LoopOnce; });
+
+      mixer.addEventListener('finished', (e) => {
+        if (e.action !== _animActions[_animCurrent]) return;
+        if (_animCurrent < _animActions.length - 1) {
+          const next = _animCurrent + 1;
+          _animActions[_animCurrent].crossFadeTo(_animActions[next], FADE, false);
+          _animActions[next].reset().play();
+          _animCurrent = next;
+          if (window._meganCam) window._meganCam.target = window._meganCam._distAction23;
+        } else {
+          _animPlaying = false;
+        }
+      });
+
+      // GLB는 기본 포즈(bind pose)가 자연스러운 서있는 자세이므로
+      // 강제 첫프레임 적용 제거 → FBX 루트모션 스케일 차이로 캐릭터 날아가는 문제 방지
+      _animReady = true;
+      console.log('[Megan] 준비 완료. 등록된 의상 메쉬:', Object.keys(_clothRefs));
+    }).catch(err => {
+      console.error('[Megan] 애니메이션 로드 실패:', err);
+    }).finally(() => {
+      document.getElementById('meganLoading')?.remove();
+    });
   },
   (xhr) => {
     if (xhr.total > 0) {
-      const pct = Math.round((xhr.loaded / xhr.total) * 100);
-      const el  = document.getElementById('meganLoading');
-      if (el) el.textContent = `${pct}% 로딩 중...`;
+      const el = document.getElementById('meganLoading');
+      if (el) el.textContent = `${Math.round((xhr.loaded / xhr.total) * 100)}% 로딩 중...`;
     }
   },
   (err) => {
-    console.error('[Megan] FBX 로드 실패:', err);
+    console.error('[Megan] GLB 로드 실패:', err);
     const el = document.getElementById('meganLoading');
     if (el) el.textContent = '캐릭터 로드 실패 😢';
   }
@@ -577,9 +768,19 @@ let t = 0;
 (function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
-  if (mixer) mixer.update(delta);   // 애니메이션 있으면 재생
-  t += 0.004;
-  scene.rotation.y = Math.sin(t) * 0.15;  // 없으면 살짝 회전
+  if (mixer) mixer.update(delta);
+  if (!_animPlaying) {
+    t += 0.004;
+    scene.rotation.y = Math.sin(t) * 0.15;
+  } else {
+    scene.rotation.y *= 0.95;
+  }
+  if (window._meganCam) {
+    const c = window._meganCam;
+    c.current += (c.target - c.current) * 0.04;
+    camera.position.set(0, c.lookAtY, c.current);
+    camera.lookAt(0, c.lookAtY, 0);
+  }
   renderer.render(scene, camera);
 })();
 </script>

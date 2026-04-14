@@ -32,6 +32,9 @@ user_profile.json
 # Docker
 .dockerignore
 
+# 모델 평가용 테스트 이미지 (임시 데이터)
+tests/
+
 # 생성된 문서 / 유틸 스크립트
 make_pdf.py
 NotoSansKR.ttf
