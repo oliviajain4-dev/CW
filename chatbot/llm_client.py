@@ -12,7 +12,8 @@ def get_outfit_comment(weather_data: dict, style_rec: dict,
                        layering: dict, tpo: str = "일상",
                        user_profile: dict = None,
                        wardrobe_items: list = None,
-                       trend_news: list = None) -> str:
+                       trend_news: list = None,
+                       calendar_events: list = None) -> str:
     """
     수석 디자이너 코멘트 — 실제 옷장 아이템 기반 맞춤 스타일링
 
@@ -109,6 +110,12 @@ layering_needed=True
     if trend_news:
         news_section = "\n【최신 패션 트렌드 뉴스 (자연스럽게 반영)】\n" + "\n".join(trend_news)
 
+    # ── 캘린더 일정 ───────────────────────────────────────────────
+    calendar_section = ""
+    if calendar_events:
+        from chatbot.calendar_client import format_events_for_prompt
+        calendar_section = "\n【오늘 일정 (TPO 맞춤 스타일링에 반영)】\n" + format_events_for_prompt(calendar_events)
+
     user_prompt = f"""오늘 스타일링 해줘. 반드시 실제 옷장 아이템 이름을 직접 언급하면서 코디를 구성해.
 
 【오늘 날씨】
@@ -126,7 +133,8 @@ layering_needed=True
 
 【오늘 용도】 {tpo}
 {profile_info}
-{news_section}"""
+{news_section}
+{calendar_section}"""
 
     message = client.messages.create(
         model="claude-sonnet-4-6",

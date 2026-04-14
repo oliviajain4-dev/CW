@@ -54,3 +54,4 @@ huggingface_hub
 tqdm
 psutil
 rich
+authlib==1.6.10

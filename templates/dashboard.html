@@ -17,6 +17,9 @@
   <button class="sidebar-btn" onclick="togglePanel('shoppingPanel')" id="btn-shopping">
     🛍<span class="btn-label">쇼핑</span>
   </button>
+  <button class="sidebar-btn" onclick="togglePanel('calendarPanel'); loadCalendar();" id="btn-calendar">
+    📅<span class="btn-label">일정</span>
+  </button>
   <div class="sidebar-divider"></div>
   <button class="sidebar-btn" onclick="togglePanel('chatPanel')" id="btn-chat">
     💬<span class="btn-label">스타일 상담</span>
@@ -180,7 +183,25 @@
   <div class="resize-handle" data-dir="nw"></div>
 </div>
 
-<!-- ⑥ 채팅 패널 -->
+<!-- ⑥ 캘린더 패널 -->
+<div class="panel" id="calendarPanel">
+  <div class="panel-header">📅 오늘 일정
+    <button class="panel-close" onclick="closePanel('calendarPanel')">✕</button>
+  </div>
+  <div class="panel-body" id="calendarBody">
+    <p class="empty-msg" style="color:#aaa;">⏳ 일정 불러오는 중...</p>
+  </div>
+  <div class="resize-handle" data-dir="n"></div>
+  <div class="resize-handle" data-dir="ne"></div>
+  <div class="resize-handle" data-dir="e"></div>
+  <div class="resize-handle" data-dir="se"></div>
+  <div class="resize-handle" data-dir="s"></div>
+  <div class="resize-handle" data-dir="sw"></div>
+  <div class="resize-handle" data-dir="w"></div>
+  <div class="resize-handle" data-dir="nw"></div>
+</div>
+
+<!-- ⑦ 채팅 패널 -->
 <div class="panel" id="chatPanel">
   <div class="panel-header">💬 스타일 상담
     <button class="panel-close" onclick="closePanel('chatPanel')">✕</button>
@@ -387,6 +408,58 @@
   // ── 쇼핑 패널 — 별도 로드 ───────────────────────────────────────
   const TYPE_COLOR = { missing: '#e05080', upgrade: '#f0a030', trend: '#7755aa' };
   const TYPE_ICON  = { missing: '❗', upgrade: '⬆️', trend: '✨' };
+
+  // ── 캘린더 일정 로드 ──────────────────────────────────────────────
+  let _calendarLoaded = false;
+  function loadCalendar() {
+    if (_calendarLoaded) return;
+    _calendarLoaded = true;
+    const el = document.getElementById('calendarBody');
+    if (!el) return;
+
+    fetch('/api/calendar')
+      .then(r => r.json())
+      .then(data => {
+        if (data.error && !data.events.length) {
+          el.innerHTML = `
+            <div style="text-align:center;padding:16px 8px;">
+              <div style="font-size:32px;margin-bottom:8px;">📅</div>
+              <p style="color:#aaa;font-size:13px;margin-bottom:12px;">구글 계정으로 로그인하면<br>오늘 일정을 자동으로 불러와요</p>
+              <a href="/auth/google" class="btn btn-primary btn-full">🔗 구글 캘린더 연동</a>
+            </div>`;
+          return;
+        }
+        if (!data.events || data.events.length === 0) {
+          el.innerHTML = '<p class="empty-msg" style="color:#aaa;">오늘 등록된 일정이 없어요 🙂</p>';
+          return;
+        }
+
+        let html = '';
+        if (data.auto_tpo) {
+          html += `<div style="background:rgba(160,176,255,0.15);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#a0b0ff;">
+            ✨ 오늘 TPO 자동 설정: <strong>${data.auto_tpo}</strong>
+          </div>`;
+        }
+        data.events.forEach(ev => {
+          const time = ev.start.includes('T')
+            ? new Date(ev.start).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})
+            : '종일';
+          const loc = ev.location ? `<span style="color:#888;font-size:11px;"> 📍${ev.location}</span>` : '';
+          html += `
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.07);">
+              <div style="min-width:38px;text-align:center;font-size:11px;color:#a0b0ff;font-weight:600;padding-top:2px;">${time}</div>
+              <div>
+                <div style="font-size:13px;color:#e0e8ff;">${ev.title}</div>
+                ${loc}
+              </div>
+            </div>`;
+        });
+        el.innerHTML = html;
+      })
+      .catch(() => {
+        if (el) el.innerHTML = '<p class="empty-msg">일정을 불러올 수 없어요.</p>';
+      });
+  }
 
   function loadShoppingCards() {
     fetch('/api/shopping')
