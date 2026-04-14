@@ -571,7 +571,7 @@ def dashboard(request: Request):
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
             (user.id,)
         )
     return render(request, "dashboard.html", {
@@ -628,7 +628,7 @@ def wardrobe(request: Request):
     with get_db() as conn:
         items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY category, created_at DESC",
             (user.id,)
         )
     categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
@@ -845,7 +845,7 @@ async def api_recommend(request: Request, quick: bool = False):
             all_items = fetchall(
                 conn,
                 f"SELECT id, category, item_type, warmth, texture, image_path "
-                f"FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
+                f"FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
                 (user.id,)
             )
 
@@ -940,7 +940,7 @@ def api_wardrobe(request: Request):
         items = fetchall(
             conn,
             f"SELECT id, category, item_type, warmth, texture, image_path, created_at "
-            f"FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            f"FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY category, created_at DESC",
             (user.id,)
         )
     grouped: dict = {"상의": [], "하의": [], "원피스": [], "아우터": []}
@@ -981,7 +981,7 @@ async def api_shopping(request: Request):
             all_items = fetchall(
                 conn,
                 f"SELECT category, item_type, warmth, texture FROM wardrobe_items "
-                f"WHERE user_id={ph} ORDER BY created_at DESC",
+                f"WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
                 (user.id,)
             )
 

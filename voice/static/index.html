@@ -19,25 +19,20 @@
 
     /* ── 헤더 ── */
     header {
-      width: 100%;
-      max-width: 480px;
+      width: 100%; max-width: 480px;
       padding: 20px 24px 0;
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: flex; align-items: center; gap: 10px;
     }
     header h1 { font-size: 17px; font-weight: 600; color: #fff; }
     .status-dot {
       width: 8px; height: 8px; border-radius: 50%;
       background: #555; flex-shrink: 0; transition: background 0.3s;
     }
-    .status-dot.connected  { background: #4caf50; }
-    .status-dot.listening  { background: #4caf50; animation: pulse 1.2s infinite; }
-    .status-dot.recording  { background: #f44336; animation: blink 0.8s infinite; }
-    .status-dot.processing { background: #ff9800; }
-    .status-dot.playing    { background: #2196f3; }
-    @keyframes blink  { 0%,100%{opacity:1} 50%{opacity:0.25} }
-    @keyframes pulse  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.5); opacity:0.6} }
+    .status-dot.listening   { background: #4caf50; animation: pulse 1.2s infinite; }
+    .status-dot.recording   { background: #4caf50; animation: pulse 0.6s infinite; }
+    .status-dot.processing  { background: #ffc107; animation: pulse 2s infinite; }
+    .status-dot.speaking    { background: #2196f3; animation: pulse 0.8s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.6);opacity:0.5} }
 
     /* ── 채팅 영역 ── */
     #chat {
@@ -50,24 +45,23 @@
       font-size: 14px; line-height: 1.55; animation: fadeIn 0.2s ease;
     }
     @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:none} }
-    .bubble.user {
-      align-self: flex-end; background: #3a3a5c; color: #e8e8f0;
-      border-bottom-right-radius: 4px;
-    }
     .bubble.assistant {
-      align-self: flex-start; background: #1e1e2e; color: #c9d1e8;
-      border-bottom-left-radius: 4px; border: 1px solid #2a2a40;
+      align-self: flex-start; background: #1e1e2e;
+      color: #c9d1e8; border-bottom-left-radius: 4px;
+      border: 1px solid #2a2a40;
     }
     .bubble.error {
-      align-self: center; background: #3b1a1a; color: #ff8a8a; font-size: 13px;
+      align-self: center; background: #3b1a1a;
+      color: #ff8a8a; font-size: 13px;
     }
 
-    /* ── 상태 표시 텍스트 ── */
+    /* ── 상태 텍스트 ── */
     #status-text {
-      font-size: 13px; color: #888; text-align: center;
-      min-height: 20px; transition: color 0.3s;
+      font-size: 15px; color: #888; text-align: center;
+      min-height: 24px; transition: color 0.3s; letter-spacing: 0.3px;
     }
     #status-text.active { color: #a0b0ff; }
+    #status-text.processing { color: #ffc107; }
 
     /* ── 오디오 레벨 바 ── */
     #level-bar {
@@ -83,52 +77,24 @@
     /* ── 컨트롤 영역 ── */
     #controls {
       width: 100%; max-width: 480px;
-      padding: 12px 24px 28px;
-      display: flex; flex-direction: column; align-items: center; gap: 12px;
+      padding: 12px 24px 32px;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
     }
 
-    /* ── 버튼 그룹 ── */
-    .btn-row { display: flex; gap: 16px; align-items: center; }
-
-    /* 대화 시작/종료 (메인 버튼) */
+    /* 토글 버튼 */
     #talk-btn {
-      width: 80px; height: 80px; border-radius: 50%; border: none;
+      padding: 14px 40px; border-radius: 30px; border: none;
       background: linear-gradient(135deg, #4caf50, #00bcd4);
-      color: white; font-size: 30px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 4px 24px rgba(76,175,80,0.4);
+      color: white; font-size: 15px; font-weight: 600;
+      cursor: pointer; letter-spacing: 0.5px;
+      box-shadow: 0 4px 20px rgba(76,175,80,0.35);
       transition: transform 0.15s, box-shadow 0.15s, background 0.3s;
       user-select: none;
     }
-    #talk-btn:hover { transform: scale(1.06); }
+    #talk-btn:hover { transform: scale(1.04); }
     #talk-btn.active {
       background: linear-gradient(135deg, #f44336, #e91e63);
-      box-shadow: 0 4px 28px rgba(244,67,54,0.5);
-      animation: glow 2s infinite;
-    }
-    @keyframes glow {
-      0%,100% { box-shadow: 0 4px 28px rgba(244,67,54,0.5); }
-      50%      { box-shadow: 0 4px 40px rgba(244,67,54,0.8); }
-    }
-
-    /* 화자 선택 */
-    #speaker-select {
-      background: #1e1e2e; border: 1px solid #2a2a40;
-      color: #c9d1e8; padding: 4px 10px; border-radius: 8px;
-      font-size: 12px; cursor: pointer;
-    }
-
-    /* 침묵 타이머 바 */
-    #silence-bar-wrap {
-      width: 220px; height: 3px; background: #1a1a2e;
-      border-radius: 2px; overflow: hidden; opacity: 0;
-      transition: opacity 0.3s;
-    }
-    #silence-bar-wrap.visible { opacity: 1; }
-    #silence-fill {
-      height: 100%; width: 0%;
-      background: linear-gradient(90deg, #7c4dff, #e040fb);
-      border-radius: 2px; transition: width 0.1s linear;
+      box-shadow: 0 4px 24px rgba(244,67,54,0.45);
     }
   </style>
 </head>
@@ -137,13 +103,6 @@
 <header>
   <div class="status-dot" id="status-dot"></div>
   <h1>코디 음성 채팅</h1>
-  <select id="speaker-select" style="margin-left:auto" title="TTS 화자">
-    <option value="ko-KR-Wavenet-A">여성 A</option>
-    <option value="ko-KR-Wavenet-B">여성 B</option>
-    <option value="ko-KR-Wavenet-C">남성 C</option>
-    <option value="ko-KR-Wavenet-D">남성 D</option>
-    <option value="ko-KR-Standard-A">여성 (일반)</option>
-  </select>
 </header>
 
 <div id="chat">
@@ -152,413 +111,489 @@
 
 <div id="controls">
   <div id="level-bar"><div id="level-fill"></div></div>
-  <div id="silence-bar-wrap"><div id="silence-fill"></div></div>
-
-  <div class="btn-row">
-    <button id="talk-btn" title="대화 시작 / 종료">🎙️</button>
-  </div>
-
+  <button id="talk-btn">대화 시작</button>
   <div id="status-text">버튼을 눌러 대화를 시작하세요</div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════
-// 설정값
+// 핵심 설계
+// - 단일 vadId 인터벌 — 대화 시작~종료 사이 절대 꺼지지 않음
+// - iOS/Android: micCtx.sampleRate 감지 후 선형보간 다운샘플링 → 항상 16kHz 전송
+// - barge-in: 서버 응답 기다리지 않고 즉시 listening 전환 → 음성 유실 없음
+// - processing 상태: VAD 완전 비활성화 (의미없는 barge-in 방지)
+// - TTS 시작 직후 200ms bargeBlockUntil → 에코 오감지 차단
 // ═══════════════════════════════════════════════════════════════════
-const WS_URL = `ws://${location.host}/voice/ws`;
 
-// 인터럽트: 재생 중 이 볼륨 이상이면 사용자가 말하는 것
-const INTERRUPT_RMS   = 0.045;
-// 침묵 감지: 이 볼륨 이하면 "조용함"으로 판단
-const SPEECH_RMS      = 0.018;
-// 침묵이 이 시간(ms) 지속되면 자동 전송 (말이 끝난 것으로 판단)
-const SILENCE_MS      = 1300;
-// 최소 발화 길이(ms) — 이보다 짧으면 잡음으로 무시
-const MIN_SPEECH_MS   = 400;
-// AI 답변 후 자동 녹음 시작 딜레이(ms)
-const AUTO_LISTEN_MS  = 400;
+// ── 설정값 ──────────────────────────────────────────────────────────
+const WS_URL          = `ws://${location.host}/voice/ws`;
+const MIC_SAMPLE_RATE = 16000;
+const OUT_SAMPLE_RATE = 24000;
+const PROC_BUF_SIZE   = 4096;
+const DB_THRESH       = -52;    // 발화 감지 임계값 (이어폰 환경 최적화)
+const SILENCE_MS      = 600;    // 침묵 후 전송 대기시간
+const BARGE_DB_THRESH = -55;    // barge-in 감지 임계값
+const BARGE_MS        = 200;    // barge-in 지속 시간
+const MAX_BARGE_SECS  = 4;      // barge-in 버퍼 최대 보관 시간
 
-// ═══════════════════════════════════════════════════════════════════
-// 상태
-// ═══════════════════════════════════════════════════════════════════
-let ws            = null;
-let mediaRecorder = null;
-let audioChunks   = [];
+// ── 전역 상태 ───────────────────────────────────────────────────────
+let ws          = null;
+let serverState = 'idle';   // idle | listening | processing | speaking
+let inConv      = false;
+let voiceCtx    = {};
 
-// 모드 플래그
-let isChatMode    = false;   // 대화 모드 켜짐/꺼짐
-let isRecording   = false;
-let isProcessing  = false;
+// 마이크
+let micStream     = null;
+let micCtx        = null;
+let analyser      = null;
+let processor     = null;
+let resampleRatio = 1;       // actualRate / 16000 (iOS에서 1이 아님)
+let maxBargeChunks = 50;     // 초기화 후 갱신
 
-// TTS 재생 큐
-let audioQueue    = [];
-let isPlaying     = false;
-let currentAudio  = null;
+// 단일 VAD 인터벌
+let vadId = null;
 
-// 마이크 / 오디오 분석
-let audioCtx  = null;
-let analyser  = null;
-let micStream = null;
+// listening 모드
+let userSpeaking = false;
+let pcmBuffer    = [];
+let silenceTimer = null;
 
-// VAD 타이머들
-let vadTimer      = null;   // 인터럽트 감지 (재생 중)
-let silenceTimer  = null;   // 침묵 감지 (녹음 중)
-let speechStart   = null;   // 발화 시작 시각
+// speaking 모드 (barge-in)
+let bargePcmBuffer  = [];
+let bargeSoundStart = null;
+let barging         = false;
+let bargeBlockUntil = 0;     // Date.now() + 200ms — 에코 차단
 
-// ═══════════════════════════════════════════════════════════════════
-// DOM
-// ═══════════════════════════════════════════════════════════════════
-const chatEl       = document.getElementById('chat');
-const talkBtn      = document.getElementById('talk-btn');
-const statusDot    = document.getElementById('status-dot');
-const levelFill    = document.getElementById('level-fill');
-const silenceFill  = document.getElementById('silence-fill');
-const silenceWrap  = document.getElementById('silence-bar-wrap');
-const statusText   = document.getElementById('status-text');
-const speakerSel   = document.getElementById('speaker-select');
+// 재생
+let playCtx        = null;
+let nextPlayTime   = 0;
+let playingSources = [];
 
-// ═══════════════════════════════════════════════════════════════════
-// UI 상태 업데이트
-// ═══════════════════════════════════════════════════════════════════
+// ── DOM ─────────────────────────────────────────────────────────────
+const chatEl     = document.getElementById('chat');
+const talkBtn    = document.getElementById('talk-btn');
+const statusDot  = document.getElementById('status-dot');
+const levelFill  = document.getElementById('level-fill');
+const statusText = document.getElementById('status-text');
+
+// ── UI ──────────────────────────────────────────────────────────────
 function setUI(state) {
   statusDot.className = `status-dot ${state}`;
-
   const labels = {
+    idle:         '버튼을 눌러 대화를 시작하세요',
+    listening:    '듣는 중',
+    recording:    '말하는 중...',
+    processing:   '생각 중',
+    speaking:     '말하는 중',
     disconnected: '연결 끊김 — 재연결 중...',
-    connected:    '버튼을 눌러 대화를 시작하세요',
-    listening:    '듣고 있어요... 말해주세요',
-    recording:    '말하는 중... (침묵하면 자동 전송)',
-    processing:   '처리 중...',
-    playing:      'AI 답변 중 — 말하면 바로 끊을게',
   };
-  statusText.textContent = labels[state] || '';
-  statusText.className   = ['listening','recording','playing'].includes(state) ? 'active' : '';
-
-  silenceWrap.classList.toggle('visible', state === 'recording');
-  if (state !== 'recording') {
-    silenceFill.style.width = '0%';
-    silenceFill.style.transition = 'none';
+  statusText.textContent = labels[state] ?? '';
+  if (state === 'processing') {
+    statusText.className = 'processing';
+  } else {
+    statusText.className = ['listening','recording','speaking'].includes(state) ? 'active' : '';
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 채팅 버블
-// ═══════════════════════════════════════════════════════════════════
 function addBubble(role, text) {
   const div = document.createElement('div');
   div.className   = `bubble ${role}`;
   div.textContent = text;
   chatEl.appendChild(div);
   chatEl.scrollTop = chatEl.scrollHeight;
-  return div;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// TTS 재생 큐
-// ═══════════════════════════════════════════════════════════════════
-function enqueueAudio(b64) {
-  audioQueue.push(b64);
-  if (!isPlaying) playNext();
-}
-
-function playNext() {
-  if (audioQueue.length === 0) {
-    isPlaying = false;
-    stopInterruptVAD();
-
-    if (isChatMode) {
-      // AI 답변 완료 → 잠깐 쉬고 자동으로 다시 듣기 시작 (티카타카 핵심)
-      setUI('listening');
-      setTimeout(() => {
-        if (isChatMode) startRecording();
-      }, AUTO_LISTEN_MS);
-    } else {
-      setUI('connected');
-    }
-    return;
+// ── PCM 변환 유틸 ────────────────────────────────────────────────────
+function downsample(float32) {
+  // 선형 보간 다운샘플링 — iOS 등 실제 sampleRate가 16kHz가 아닐 때 사용
+  if (resampleRatio === 1) return float32;
+  const outLen = Math.round(float32.length / resampleRatio);
+  const out    = new Float32Array(outLen);
+  for (let i = 0; i < outLen; i++) {
+    const src  = i * resampleRatio;
+    const lo   = Math.floor(src);
+    const hi   = Math.min(lo + 1, float32.length - 1);
+    const frac = src - lo;
+    out[i] = float32[lo] * (1 - frac) + float32[hi] * frac;
   }
+  return out;
+}
 
-  isPlaying = true;
-  setUI('playing');
-
-  const b64   = audioQueue.shift();
+function floatToInt16(f32) {
+  const out = new Int16Array(f32.length);
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    out[i]  = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return out;
+}
+function mergeInt16(chunks) {
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const out   = new Int16Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+function int16ToBase64(i16) {
+  const bytes = new Uint8Array(i16.buffer);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s);
+}
+function base64ToInt16(b64) {
   const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-  const blob  = new Blob([bytes], { type: 'audio/mp3' });
-  const url   = URL.createObjectURL(blob);
-
-  currentAudio = new Audio(url);
-  currentAudio.onended = () => { URL.revokeObjectURL(url); playNext(); };
-  currentAudio.onerror = () => { URL.revokeObjectURL(url); playNext(); };
-  currentAudio.play().catch(() => playNext());
-
-  // 재생 시작하면 인터럽트 VAD 활성화
-  startInterruptVAD();
+  return new Int16Array(bytes.buffer);
 }
 
-function stopPlayback() {
-  audioQueue = [];
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.src = '';
-    currentAudio = null;
-  }
-  isPlaying = false;
-  stopInterruptVAD();
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// 인터럽트 VAD — 재생 중 사용자가 말하면 AI 발화 중단
-// ═══════════════════════════════════════════════════════════════════
-function startInterruptVAD() {
-  if (!analyser || vadTimer) return;
+// ── dB 계산 ─────────────────────────────────────────────────────────
+function getDb() {
+  if (!analyser) return -100;
   const data = new Uint8Array(analyser.fftSize);
-
-  vadTimer = setInterval(() => {
-    if (!isPlaying) { stopInterruptVAD(); return; }
-    analyser.getByteTimeDomainData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      const v = (data[i] - 128) / 128;
-      sum += v * v;
-    }
-    const rms = Math.sqrt(sum / data.length);
-    levelFill.style.width = Math.min(rms * 500, 100) + '%';
-
-    if (rms > INTERRUPT_RMS) {
-      triggerInterrupt();
-    }
-  }, 80);
-}
-
-function stopInterruptVAD() {
-  if (vadTimer) { clearInterval(vadTimer); vadTimer = null; }
-  levelFill.style.width = '0%';
-}
-
-function triggerInterrupt() {
-  if (!isPlaying) return;
-  stopPlayback();
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'interrupt' }));
+  analyser.getByteTimeDomainData(data);
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    const v = (data[i] - 128) / 128;
+    sum += v * v;
   }
-
-  if (isChatMode) {
-    // 인터럽트 후 즉시 다시 녹음 시작 (사용자가 말하고 싶은 것)
-    setTimeout(() => { if (isChatMode) startRecording(); }, 100);
-  } else {
-    setUI('connected');
-  }
+  const rms = Math.sqrt(sum / data.length);
+  levelFill.style.width = Math.min(rms * 600, 100) + '%';
+  return rms < 1e-7 ? -100 : 20 * Math.log10(rms);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 침묵 감지 VAD — 녹음 중 말이 끝나면 자동 전송
-// ═══════════════════════════════════════════════════════════════════
-function startSilenceVAD() {
-  if (!analyser) return;
-  speechStart  = null;
-  let hasSpeech = false;
-  const data    = new Uint8Array(analyser.fftSize);
-
-  function tick() {
-    if (!isRecording) {
-      levelFill.style.width = '0%';
-      return;
-    }
-    analyser.getByteTimeDomainData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) {
-      const v = (data[i] - 128) / 128;
-      sum += v * v;
-    }
-    const rms = Math.sqrt(sum / data.length);
-    levelFill.style.width = Math.min(rms * 400, 100) + '%';
-
-    if (rms > SPEECH_RMS) {
-      // 말하고 있음
-      if (!hasSpeech) {
-        hasSpeech  = true;
-        speechStart = Date.now();
-      }
-      // 침묵 타이머 초기화
-      if (silenceTimer) {
-        clearTimeout(silenceTimer);
-        silenceTimer = null;
-        silenceFill.style.transition = 'none';
-        silenceFill.style.width = '0%';
-      }
-    } else if (hasSpeech && !silenceTimer) {
-      // 말하다 멈춤 → 침묵 타이머 시작
-      // 최소 발화 길이 확인
-      const spokenMs = speechStart ? Date.now() - speechStart : 0;
-      if (spokenMs < MIN_SPEECH_MS) {
-        // 너무 짧으면 무시
-      } else {
-        // 침묵 진행 바 애니메이션
-        silenceFill.style.transition = `width ${SILENCE_MS}ms linear`;
-        silenceFill.style.width = '100%';
-        silenceTimer = setTimeout(() => {
-          silenceTimer = null;
-          if (isRecording && isChatMode) stopRecording(); // 자동 전송
-        }, SILENCE_MS);
-      }
-    }
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// 마이크 초기화
-// ═══════════════════════════════════════════════════════════════════
+// ── 마이크 초기화 ────────────────────────────────────────────────────
 async function initMic() {
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-    const src = audioCtx.createMediaStreamSource(micStream);
-    analyser  = audioCtx.createAnalyser();
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+
+    // sampleRate 강제 없이 생성 — iOS Safari 호환
+    micCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const actualRate = micCtx.sampleRate;
+    resampleRatio  = actualRate / MIC_SAMPLE_RATE;
+
+    // barge-in 버퍼 최대 청크 수 계산 (다운샘플 후 기준)
+    const chunkDuration = PROC_BUF_SIZE / actualRate;  // 초 단위
+    maxBargeChunks = Math.ceil(MAX_BARGE_SECS / chunkDuration);
+
+    const src = micCtx.createMediaStreamSource(micStream);
+    analyser  = micCtx.createAnalyser();
     analyser.fftSize = 256;
     src.connect(analyser);
+
+    processor = micCtx.createScriptProcessor(PROC_BUF_SIZE, 1, 1);
+    processor.onaudioprocess = onAudioProcess;
+    src.connect(processor);
+    processor.connect(micCtx.destination);
     return true;
   } catch (e) {
-    addBubble('error', '마이크 접근 권한이 필요합니다: ' + e.message);
+    addBubble('error', '마이크 권한이 필요합니다: ' + e.message);
     return false;
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// 녹음 시작 / 종료 / 전송
-// ═══════════════════════════════════════════════════════════════════
-function startRecording() {
-  if (!micStream || isRecording || isProcessing) return;
-  if (isPlaying) triggerInterrupt();
+// ── PCM 수집 콜백 ────────────────────────────────────────────────────
+function onAudioProcess(e) {
+  if (!inConv) return;
+  const raw    = e.inputBuffer.getChannelData(0);
+  const f32    = downsample(raw);          // iOS: 44100→16000Hz 변환
+  const int16  = floatToInt16(f32);
 
-  audioChunks  = [];
-  mediaRecorder = new MediaRecorder(micStream, { mimeType: 'audio/webm;codecs=opus' });
-  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
-  mediaRecorder.onstop = sendAudio;
-  mediaRecorder.start(100);
-
-  isRecording = true;
-  setUI('recording');
-  startSilenceVAD();
+  if (userSpeaking && serverState === 'listening') {
+    pcmBuffer.push(int16);
+  }
+  if (serverState === 'speaking' && !barging) {
+    bargePcmBuffer.push(int16);
+    if (bargePcmBuffer.length > maxBargeChunks) bargePcmBuffer.shift();
+  }
 }
 
-function stopRecording() {
-  if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
+// ═══════════════════════════════════════════════════════════════════
+// 단일 VAD 루프
+// ═══════════════════════════════════════════════════════════════════
+function startVAD() {
+  if (vadId) return;
+  vadId = setInterval(vadTick, 50);
+}
+
+function stopVAD() {
+  if (vadId) { clearInterval(vadId); vadId = null; }
   if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-  mediaRecorder.stop();
-  isRecording  = false;
-  isProcessing = true;
-  setUI('processing');
+  userSpeaking    = false;
+  bargeSoundStart = null;
+  bargeBlockUntil = 0;
+  pcmBuffer       = [];
+  bargePcmBuffer  = [];
+  levelFill.style.width = '0%';
 }
 
-async function sendAudio() {
-  if (audioChunks.length === 0) {
-    isProcessing = false;
-    if (isChatMode) { setUI('listening'); setTimeout(() => isChatMode && startRecording(), 300); }
-    else setUI('connected');
+function vadTick() {
+  if (!inConv || !analyser) return;
+  // 브라우저가 AudioContext를 suspend시킨 경우 즉시 복구
+  if (micCtx && micCtx.state === 'suspended') micCtx.resume();
+  const db = getDb();
+
+  // ── listening: 발화 감지 → PCM 누적 → 침묵 후 전송 ─────────────
+  if (serverState === 'listening') {
+    bargeSoundStart = null;
+
+    if (db > DB_THRESH) {
+      if (!userSpeaking) {
+        userSpeaking = true;
+        pcmBuffer    = [];
+        setUI('recording');
+      }
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+
+    } else if (userSpeaking && !silenceTimer) {
+      silenceTimer = setTimeout(() => {
+        silenceTimer = null;
+        if (serverState === 'listening' && inConv) sendAudioChunk();
+      }, SILENCE_MS);
+    }
+
+  // ── processing: VAD 완전 비활성화 ───────────────────────────────
+  } else if (serverState === 'processing') {
+    if (userSpeaking) { userSpeaking = false; pcmBuffer = []; }
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+    bargeSoundStart = null;
+
+  // ── speaking: barge-in 감지 ─────────────────────────────────────
+  } else if (serverState === 'speaking') {
+    if (userSpeaking) { userSpeaking = false; pcmBuffer = []; }
+    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+
+    // TTS 시작 직후 에코 차단
+    if (Date.now() < bargeBlockUntil) { bargeSoundStart = null; return; }
+
+    if (db > BARGE_DB_THRESH) {
+      if (!bargeSoundStart) bargeSoundStart = Date.now();
+      else if (Date.now() - bargeSoundStart >= BARGE_MS) triggerBargeIn();
+    } else {
+      bargeSoundStart = null;
+    }
+  }
+}
+
+// ── 오디오 청크 전송 ─────────────────────────────────────────────────
+function sendAudioChunk() {
+  userSpeaking = false;
+  setUI('listening');
+
+  if (!pcmBuffer.length || !ws || ws.readyState !== WebSocket.OPEN) {
+    pcmBuffer = [];
     return;
   }
-  const blob   = new Blob(audioChunks, { type: 'audio/webm' });
-  const buffer = await blob.arrayBuffer();
-  const b64    = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+  const merged = mergeInt16(pcmBuffer);
+  pcmBuffer = [];
+  ws.send(JSON.stringify({ type: 'audio_chunk', data: int16ToBase64(merged) }));
+}
 
+// ── barge-in ─────────────────────────────────────────────────────────
+function triggerBargeIn() {
+  // 1. 재생 즉시 중단
+  stopPlayback();
+  // 2. 서버에 barge_in 신호만 전송 (오디오 없음)
   if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type:    'audio',
-      data:    b64,
-      speaker: speakerSel.value,
-      context: {},
-    }));
+    ws.send(JSON.stringify({ type: 'barge_in' }));
   }
+  // 3. 상태 즉시 전환 — 서버 응답 기다리지 않음
+  bargeSoundStart = null;
+  barging         = false;      // 즉시 해제 → 이후 오디오 캡처 정상화
+  serverState     = 'listening';
+  pcmBuffer       = [];
+  userSpeaking    = false;
+  bargePcmBuffer  = [];
+  setUI('listening');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PCM 재생
+// ═══════════════════════════════════════════════════════════════════
+function ensurePlayCtx() {
+  if (!playCtx || playCtx.state === 'closed') {
+    playCtx = new AudioContext({ sampleRate: OUT_SAMPLE_RATE });
+    nextPlayTime   = 0;
+    playingSources = [];
+  }
+  if (playCtx.state === 'suspended') playCtx.resume();
+}
+
+function enqueuePCM(b64) {
+  if (barging) return;
+  ensurePlayCtx();
+  const int16 = base64ToInt16(b64);
+  if (!int16.length) return;
+  const f32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32768.0;
+  const buf = playCtx.createBuffer(1, f32.length, OUT_SAMPLE_RATE);
+  buf.getChannelData(0).set(f32);
+  const src = playCtx.createBufferSource();
+  src.buffer = buf;
+  src.connect(playCtx.destination);
+  const when = Math.max(nextPlayTime, playCtx.currentTime + 0.01);
+  src.start(when);
+  nextPlayTime = when + buf.duration;
+  playingSources.push(src);
+  src.onended = () => {
+    playingSources = playingSources.filter(s => s !== src);
+  };
+}
+
+function stopPlayback() {
+  for (const src of playingSources) { try { src.stop(0); } catch (_) {} }
+  playingSources = [];
+  if (playCtx) nextPlayTime = playCtx.currentTime;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 컨텍스트 로드
+// ═══════════════════════════════════════════════════════════════════
+const SKY_LABEL = { 1: '맑음', 3: '구름많음', 4: '흐림' };
+const PTY_LABEL = { 0: '', 1: '비', 2: '비/눈', 3: '눈', 5: '빗방울', 6: '진눈깨비', 7: '눈날림' };
+
+async function fetchVoiceContext() {
+  try {
+    const [wdRes, weRes] = await Promise.allSettled([
+      fetch('/api/wardrobe').then(r => r.ok ? r.json() : null),
+      fetch('/api/weather').then(r => r.ok ? r.json() : null),
+    ]);
+    const wardrobe = [];
+    if (wdRes.status === 'fulfilled' && wdRes.value?.categories) {
+      for (const [cat, items] of Object.entries(wdRes.value.categories))
+        for (const item of items)
+          wardrobe.push({ category: cat, item_type: item.item_type });
+    }
+    let weather_label = '';
+    if (weRes.status === 'fulfilled' && weRes.value?.morning) {
+      const m   = weRes.value.morning;
+      const sky = SKY_LABEL[m.sky] ?? '';
+      const pty = PTY_LABEL[m.pty] ?? '';
+      weather_label = `${Math.round(m.temp ?? m.feels_like ?? 0)}°C${(pty || sky) ? ', ' + (pty || sky) : ''}`;
+    }
+    return { wardrobe, weather_label };
+  } catch { return {}; }
 }
 
 // ═══════════════════════════════════════════════════════════════════
 // WebSocket
 // ═══════════════════════════════════════════════════════════════════
-let assistantBubble = null;  // 현재 AI 응답 버블 (누적 표시용)
-
 function connectWS() {
   ws = new WebSocket(WS_URL);
-
-  ws.onopen = () => setUI('connected');
-
+  ws.onopen = () => {
+    if (inConv) {
+      // 재연결 후 대화 상태 자동 복구
+      ws.send(JSON.stringify({ type: 'start_conversation', context: voiceCtx }));
+      setUI('listening');
+    } else {
+      setUI('idle');
+    }
+  };
+  ws.onerror = () => ws.close();
   ws.onclose = () => {
     setUI('disconnected');
-    isChatMode = false;
-    talkBtn.classList.remove('active');
-    talkBtn.textContent = '🎙️';
+    // inConv, micStream, stopVAD() 건드리지 않음 — 마이크 생명주기는 버튼에만 연결
+    talkBtn.textContent = inConv ? '대화 종료' : '대화 시작';
     setTimeout(connectWS, 3000);
   };
-
-  ws.onerror = () => ws.close();
 
   ws.onmessage = ({ data }) => {
     const msg = JSON.parse(data);
 
-    if (msg.type === 'transcript') {
-      addBubble('user', msg.text);
-      assistantBubble = addBubble('assistant', '...');
-    }
-    else if (msg.type === 'audio_chunk') {
-      enqueueAudio(msg.data);
-    }
-    else if (msg.type === 'ai_text') {
-      // 서버가 누적 텍스트를 보내면 버블 업데이트 (선택적)
-      if (assistantBubble) assistantBubble.textContent = msg.text;
-    }
-    else if (msg.type === 'done') {
-      isProcessing = false;
-      // playNext()가 큐를 다 소진하면 자동으로 다시 듣기 시작
-    }
-    else if (msg.type === 'interrupted') {
-      isProcessing = false;
-      // triggerInterrupt()에서 이미 처리됨
-    }
-    else if (msg.type === 'error') {
-      isProcessing = false;
-      addBubble('error', '오류: ' + msg.message);
-      if (isChatMode) {
+    if (msg.type === 'state') {
+      serverState = msg.value;
+
+      if (msg.value === 'listening') {
+        barging         = false;
+        userSpeaking    = false;
+        pcmBuffer       = [];
+        bargeSoundStart = null;
         setUI('listening');
-        setTimeout(() => isChatMode && startRecording(), 500);
-      } else {
-        setUI('connected');
+
+      } else if (msg.value === 'processing') {
+        userSpeaking = false;
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        pcmBuffer = [];
+        setUI('processing');
+
+      } else if (msg.value === 'speaking') {
+        userSpeaking = false;
+        pcmBuffer    = [];
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
+        bargePcmBuffer  = [];
+        bargeSoundStart = null;
+        bargeBlockUntil = Date.now() + 200;  // 에코 차단 200ms
+        setUI('speaking');
       }
+
+    } else if (msg.type === 'audio_chunk') {
+      enqueuePCM(msg.data);
+
+    } else if (msg.type === 'error') {
+      addBubble('error', '오류: ' + msg.message);
+      if (inConv) serverState = 'listening';  // 마이크는 그대로, 상태만 복구
+      setUI(inConv ? 'listening' : 'idle');
+
     }
+    // ping: 무시
   };
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// 대화 모드 토글 (대화 시작 / 종료)
+// 대화 시작 / 종료 토글
 // ═══════════════════════════════════════════════════════════════════
 talkBtn.addEventListener('click', async () => {
-  if (!isChatMode) {
-    // ── 대화 시작 ──
+  if (!inConv) {
+    // ── 대화 시작 ────────────────────────────────────────────────
     if (!micStream) {
       const ok = await initMic();
       if (!ok) return;
     }
-    isChatMode = true;
+    voiceCtx = await fetchVoiceContext();
+    inConv   = true;
+    talkBtn.textContent = '대화 종료';
     talkBtn.classList.add('active');
-    talkBtn.textContent = '⏹️';
-    startRecording();
-  } else {
-    // ── 대화 종료 ──
-    isChatMode = false;
-    talkBtn.classList.remove('active');
-    talkBtn.textContent = '🎙️';
 
-    if (isRecording) stopRecording();
-    if (isPlaying)   stopPlayback();
-    if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; }
-    isProcessing = false;
-    setUI('connected');
+    startVAD();  // VAD 단 한 번만 시작
+
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'start_conversation', context: voiceCtx }));
+    }
+
+  } else {
+    // ── 대화 종료 ────────────────────────────────────────────────
+    inConv = false;
+    talkBtn.textContent = '대화 시작';
+    talkBtn.classList.remove('active');
+
+    stopVAD();
+    stopPlayback();
+
+    // 마이크 완전 해제 — 대화 종료 버튼 클릭 시에만 실행
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (micCtx)    { micCtx.close(); micCtx = null; }
+    analyser  = null;
+    processor = null;
+
+    barging     = false;
+    serverState = 'idle';
+    setUI('idle');
+
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'end_conversation' }));
+    }
   }
 });
 
-// ═══════════════════════════════════════════════════════════════════
-// 초기화
-// ═══════════════════════════════════════════════════════════════════
+// ── 모바일: 화면 복귀 시 WebSocket 재연결 ──────────────────────────
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && ws?.readyState !== WebSocket.OPEN) {
+    connectWS();
+  }
+});
+
+// ── 초기화 ──────────────────────────────────────────────────────────
 connectWS();
 </script>
 </body>
