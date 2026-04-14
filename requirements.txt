@@ -1,22 +1,56 @@
+# ── 웹 서버 ──────────────────────────────────────
+flask
+werkzeug
+jinja2
+itsdangerous
+starlette
 fastapi
 uvicorn[standard]
 python-multipart
-jinja2
-werkzeug
-itsdangerous
-starlette
+
+# ── DB ───────────────────────────────────────────
 psycopg2-binary
+
+# ── AI / 이미지 분석 ──────────────────────────────
+# torch/torchvision → Dockerfile에서 CPU 버전 별도 설치
 open_clip_torch
 transformers
+timm
 pillow
 numpy
+scipy
+opencv-python
+ftfy
+
+# ── 이미지 클라우드 저장 ───────────────────────────
 cloudinary==1.44.1
-anthropic
-requests
-python-dotenv
-matplotlib
+
+# ── 인증 (로그인) ─────────────────────────────────
 Flask-Login==0.6.3
 authlib==1.3.2
-openai-whisper
+
+# ── AI 추천 (Claude API) ──────────────────────────
+anthropic
 openai
+
+# ── 날씨 API / 환경변수 ───────────────────────────
+requests
+python-dotenv
+
+# ── 흐름도 생성 ───────────────────────────────────
+matplotlib
+
+# ── HTTP 클라이언트 ───────────────────────────────
 httpx
+
+# ── 음성 (STT) ────────────────────────────────────
+openai-whisper
+
+# ── 데이터 처리 ───────────────────────────────────
+pandas
+pydantic
+PyYAML
+huggingface_hub
+tqdm
+psutil
+rich
