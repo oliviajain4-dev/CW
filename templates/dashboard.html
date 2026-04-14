@@ -265,6 +265,10 @@
 
 {% block scripts %}
 <script>
+  const userProfile = {
+    height: {{ profile.get('height', 165) | int if profile else 165 }},
+    weight: {{ profile.get('weight', 57)  | int if profile else 57  }},
+  };
   const chatContext = {
     tpo: "{{ profile.get('tpo', '일상') }}",
     wardrobe: [
@@ -536,21 +540,39 @@ const FADE = 0.5;
 // ── 의상 메쉬 참조 & 원본 재질 저장 ─────────────────────────
 // category → { mesh, origMat }
 const _clothRefs = {};
+let _bodyMesh = null;
 
 // GLB 내 메쉬 이름 후보 (카테고리별)
-// console에서 [Mesh] 로그 확인 후 맞는 이름으로 자동 매핑됨
 const CLOTH_MESH_CANDIDATES = {
-  '상의':   ['Ch22_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
-  '하의':   ['Ch22_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
-  '아우터': ['Ch22_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
-  '원피스': ['Ch22_Dress',  'Dress',  'dress',  'Body_Dress'],
+  '상의':   ['Cloth_Layer', 'Ch22_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
+  '하의':   ['Cloth_Layer', 'Ch22_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
+  '아우터': ['Cloth_Layer', 'Ch22_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
+  '원피스': ['Cloth_Layer', 'Ch22_Dress',  'Dress',  'dress',  'Body_Dress'],
 };
 
-// ── 옷 텍스처 교체 (방법A: 3D 메쉬에 사진 직접 적용) ─────────
+// ── UV 정면투영 ───────────────────────────────────────────────
+function _applyFrontProjectionUV(mesh) {
+  try {
+    const geo = mesh.geometry;
+    geo.computeBoundingBox();
+    const bbox = geo.boundingBox;
+    const w = bbox.max.x - bbox.min.x || 1;
+    const h = bbox.max.y - bbox.min.y || 1;
+    const pos = geo.attributes.position;
+    const uvs = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      uvs[i * 2]     = (pos.getX(i) - bbox.min.x) / w;
+      uvs[i * 2 + 1] = 1.0 - (pos.getY(i) - bbox.min.y) / h;
+    }
+    geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geo.attributes.uv.needsUpdate = true;
+  } catch(e) { console.warn('[Cloth] UV 투영 실패:', e); }
+}
+
+// ── 옷 텍스처 교체 ────────────────────────────────────────────
 function _applyClothTexture(category, imgUrl) {
   const ref = _clothRefs[category];
   if (!ref) {
-    // 메쉬 없으면 HTML 오버레이 fallback
     console.warn('[Cloth] 메쉬 없음, 오버레이 사용:', category);
     _showOverlay(category, imgUrl);
     return;
@@ -560,14 +582,25 @@ function _applyClothTexture(category, imgUrl) {
     ? '/proxy/image?url=' + encodeURIComponent(imgUrl) : imgUrl;
 
   new THREE.TextureLoader().load(proxyUrl, (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    // 원래 재질의 속성을 유지하면서 텍스처만 교체
-    const newMat = ref.origMat.clone();
-    newMat.map = tex;
-    newMat.color.set(0xffffff);  // 원래 색상 대신 텍스처 색 그대로
-    newMat.needsUpdate = true;
+    tex.colorSpace  = THREE.SRGBColorSpace;
+    tex.flipY       = false;
+    tex.offset.set(0, 0);
+    tex.repeat.set(1, 1);
+    tex.needsUpdate = true;
+
+    if (ref.mesh.material) {
+      const oldMats = Array.isArray(ref.mesh.material)
+        ? ref.mesh.material : [ref.mesh.material];
+      oldMats.forEach(m => m?.dispose());
+    }
+
+    const newMat = new THREE.MeshStandardMaterial({
+      map: tex, transparent: false, side: THREE.FrontSide,
+      depthWrite: true, metalness: 0, roughness: 0.85,
+    });
     ref.mesh.material = newMat;
-    console.log(`[Cloth] ${category} 텍스처 적용 완료`);
+    if (ref.mesh.name === 'Cloth_Layer') ref.mesh.visible = true;
+    console.log(`[Cloth] ${category} 재질 교체 완료 (${ref.mesh.name})`);
   }, null, (err) => {
     console.error('[Cloth] 텍스처 로드 실패, 오버레이 fallback:', err);
     _showOverlay(category, imgUrl);
@@ -576,7 +609,10 @@ function _applyClothTexture(category, imgUrl) {
 
 function _resetClothTexture(category) {
   const ref = _clothRefs[category];
-  if (ref) ref.mesh.material = ref.origMat;  // 원본 재질 복원
+  if (ref) {
+    if (ref.mesh.name === 'Cloth_Layer') ref.mesh.visible = false;
+    else if (ref.origMat) ref.mesh.material = ref.origMat;
+  }
   _hideOverlay(category);
 }
 
@@ -618,42 +654,98 @@ gltfLoader.load(
     const model = gltf.scene;
     scene.add(model);
 
-    // ── 스케일 보정 ───────────────────────────────────────────────
+    // ── 스케일 보정 + 키/체중 체형 반영 ────────────────────────────
     model.updateMatrixWorld(true);
     {
       const tmpBox  = new THREE.Box3().setFromObject(model);
       const tmpSize = tmpBox.getSize(new THREE.Vector3());
-      if (tmpSize.y < 1)   { model.scale.setScalar(100); console.log('[Megan] 100배 스케일'); }
-      else if (tmpSize.y > 500) { model.scale.setScalar(0.1); console.log('[Megan] 0.1배 스케일'); }
+      let base = 1;
+      if (tmpSize.y < 1)    { base = 100; }
+      else if (tmpSize.y > 500) { base = 0.1; }
+
+      // 키/체중 → 체형 스케일 (기준: 165cm / 57kg)
+      const AVG_H = 165, AVG_W = 57;
+      const hRatio = userProfile.height / AVG_H;                   // 키 → Y축
+      const wRatio = 1 + (userProfile.weight / AVG_W - 1) * 0.35; // 체중 → X,Z축 (완만하게)
+
+      model.scale.set(base * wRatio, base * hRatio, base * wRatio);
+      console.log(`[Megan] 체형 반영 → 키:${userProfile.height}cm(x${hRatio.toFixed(2)}) 체중:${userProfile.weight}kg(x${wRatio.toFixed(2)})`);
     }
 
-    // ── 메쉬 이름 출력 + 의상 메쉬 매핑 ─────────────────────────
+    // ── 메쉬 이름 출력 + 의상 메쉬 매핑 (2-pass: Cloth_Layer 우선) ──
     const allMeshNames = [];
+    let clothLayerMesh = null;
     try {
+      // 1st pass: 이름 수집 + Cloth_Layer / _bodyMesh 탐색
       model.traverse(obj => {
         if (!obj.isMesh) return;
         allMeshNames.push(obj.name);
-        if (!obj.material) return;
-        for (const [cat, names] of Object.entries(CLOTH_MESH_CANDIDATES)) {
-          if (!_clothRefs[cat] && names.includes(obj.name)) {
-            try {
-              _clothRefs[cat] = {
-                mesh: obj,
-                origMat: Array.isArray(obj.material)
-                  ? obj.material.map(m => m.clone())
-                  : obj.material.clone(),
-              };
-            } catch (e) { /* ignore */ }
-          }
-        }
+        if (obj.name === 'Cloth_Layer') clothLayerMesh = obj;
+        if (obj.name === 'Ch22_Body')   _bodyMesh = obj;
       });
-    } catch (e) { /* ignore */ }
-    console.log('[Megan] 전체 메쉬 목록:', allMeshNames);
 
-    // ── GLB PBR 재질 보정: 반짝임 제거 ──────────────────────────
+      // 2nd pass: Cloth_Layer 있으면 모든 카테고리를 그것으로 연결
+      if (clothLayerMesh) {
+        for (const cat of Object.keys(CLOTH_MESH_CANDIDATES)) {
+          _clothRefs[cat] = { mesh: clothLayerMesh, origMat: null };
+        }
+        console.log('[Cloth] Cloth_Layer 발견 → 모든 카테고리 연결');
+      } else {
+        // fallback: Ch22_Shirt / Ch22_Pants 등 개별 메쉬 매핑
+        model.traverse(obj => {
+          if (!obj.isMesh || !obj.material) return;
+          for (const [cat, names] of Object.entries(CLOTH_MESH_CANDIDATES)) {
+            if (!_clothRefs[cat] && names.includes(obj.name)) {
+              try {
+                _clothRefs[cat] = {
+                  mesh: obj,
+                  origMat: Array.isArray(obj.material)
+                    ? obj.material.map(m => m.clone())
+                    : obj.material.clone(),
+                };
+              } catch (e) { /* ignore */ }
+            }
+          }
+        });
+        console.log('[Cloth] Cloth_Layer 없음 → 개별 메쉬 fallback');
+      }
+    } catch (e) { /* ignore */ }
+    console.log('[Megan] 전체 메쉬 목록:', allMeshNames.length, allMeshNames);
+
+    // ── GLB PBR 재질 보정: 반짝임 제거 + 의상 베이지 기본색 + 머리카락 투명도 ──
     model.traverse(obj => {
       if (!obj.isMesh) return;
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+
+      // 의상 메쉬: UV 정면투영 + 베이지 중립색 (Cloth_Layer는 숨김)
+      const clothMeshNames = ['Cloth_Layer', 'Ch22_Shirt', 'Ch22_Pants', 'Ch22_Jacket', 'Ch22_Dress'];
+      if (clothMeshNames.includes(obj.name)) {
+        _applyFrontProjectionUV(obj);
+        if (obj.name === 'Cloth_Layer') {
+          obj.visible = false;   // 텍스처 입히기 전까지 숨김
+        } else {
+          obj.material = new THREE.MeshStandardMaterial({
+            color: 0xd8cfc4, metalness: 0, roughness: 0.9,
+          });
+        }
+        return;
+      }
+
+      // 머리카락 / 속눈썹: 알파 투명도 처리
+      if (obj.name === 'Ch22_Hair' || obj.name === 'Ch22_Eyelashes') {
+        mats.forEach(mat => {
+          if (!mat) return;
+          mat.transparent = true;
+          mat.alphaTest   = 0.3;
+          mat.side        = THREE.DoubleSide;
+          mat.depthWrite  = false;
+          mat.metalness   = 0;
+          mat.roughness   = 0.85;
+          mat.needsUpdate = true;
+        });
+        return;
+      }
+
       mats.forEach(mat => {
         if (!mat) return;
         mat.metalness = 0;
