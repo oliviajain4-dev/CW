@@ -10,49 +10,82 @@ from datetime import datetime, timezone
 from typing import Optional
 
 
-def get_today_events(access_token: str) -> list[dict[str, str]]:
-    """
-    Google Calendar API로 오늘 일정 가져오기
-    access_token: Google OAuth 로그인 후 세션에 저장된 토큰
-    """
+def _fetch_events(access_token: str, time_min: str, time_max: str, max_results: int = 30) -> list[dict]:
+    """Google Calendar API 공통 호출"""
     try:
-        now = datetime.now(timezone.utc)
-        # 한국 시간 기준 오늘 (UTC+9)
-        from datetime import timedelta
-        kst_offset = timedelta(hours=9)
-        kst_now = now + kst_offset
-        day_start = kst_now.replace(hour=0, minute=0, second=0, microsecond=0) - kst_offset
-        day_end   = kst_now.replace(hour=23, minute=59, second=59, microsecond=0) - kst_offset
-
         url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
         headers = {"Authorization": f"Bearer {access_token}"}
         params = {
-            "timeMin":      day_start.isoformat() + "Z",
-            "timeMax":      day_end.isoformat() + "Z",
+            "timeMin":      time_min,
+            "timeMax":      time_max,
             "singleEvents": True,
             "orderBy":      "startTime",
-            "maxResults":   10,
+            "maxResults":   max_results,
         }
-
         resp = httpx.get(url, headers=headers, params=params, timeout=8)
         resp.raise_for_status()
-
         events = []
         for item in resp.json().get("items", []):
-            title      = item.get("summary", "")
-            start_raw  = item.get("start", {})
-            start_time = start_raw.get("dateTime", start_raw.get("date", ""))
-            location   = item.get("location", "")
+            start_raw = item.get("start", {})
             events.append({
-                "title":    title,
-                "start":    start_time,
-                "location": location,
+                "title":    item.get("summary", ""),
+                "start":    start_raw.get("dateTime", start_raw.get("date", "")),
+                "location": item.get("location", ""),
             })
         return events
-
     except Exception as e:
         print(f"[calendar] API 오류: {e}")
         return []
+
+
+def get_today_events(access_token: str) -> list[dict[str, str]]:
+    """오늘 하루 일정 (TPO 추론용)"""
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    kst_offset = timedelta(hours=9)
+    kst_now = now + kst_offset
+    day_start = kst_now.replace(hour=0, minute=0, second=0, microsecond=0) - kst_offset
+    day_end   = kst_now.replace(hour=23, minute=59, second=59, microsecond=0) - kst_offset
+    return _fetch_events(
+        access_token,
+        day_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        day_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        max_results=10,
+    )
+
+
+def get_week_events(access_token: str) -> list[dict]:
+    """오늘부터 7일간 일정, 날짜별로 그룹핑해서 반환"""
+    from datetime import timedelta
+    now = datetime.now(timezone.utc)
+    kst_offset = timedelta(hours=9)
+    kst_now = now + kst_offset
+    week_start = kst_now.replace(hour=0, minute=0, second=0, microsecond=0) - kst_offset
+    week_end   = week_start + timedelta(days=7)
+
+    raw = _fetch_events(
+        access_token,
+        week_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        week_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        max_results=50,
+    )
+
+    # 날짜별 그룹핑
+    from collections import OrderedDict
+    grouped: dict[str, list] = OrderedDict()
+    for ev in raw:
+        start = ev["start"]
+        if "T" in start:
+            date_key = start[:10]  # "2026-04-15"
+        else:
+            date_key = start       # 종일 일정은 "2026-04-15"
+        grouped.setdefault(date_key, []).append(ev)
+
+    result = []
+    today_str = kst_now.strftime("%Y-%m-%d")
+    for date_key, evs in grouped.items():
+        result.append({"date": date_key, "is_today": date_key == today_str, "events": evs})
+    return result
 
 
 # ── 일정 제목 → TPO 자동 추론 ──────────────────────────────────────
