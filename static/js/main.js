@@ -254,13 +254,18 @@ if (imageInput) {
 const chatWindow = document.getElementById("chatWindow");
 const chatInput  = document.getElementById("chatInput");
 const chatSend   = document.getElementById("chatSend");
+let chatHistory  = [];
 
 function appendMsg(text, role) {
   if (!chatWindow) return;
   const div = document.createElement("div");
   div.className = `chat-msg ${role}`;
-  if (role === "assistant" && typeof marked !== "undefined") {
-    div.innerHTML = marked.parse(text);
+  if (role === "assistant") {
+    const html = (typeof marked !== "undefined")
+      ? marked.parse(text)
+      : text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+          '<a href="$2" target="_blank" rel="noopener" style="color:#c0408a;">$1</a>');
+    div.innerHTML = html;
   } else {
     div.textContent = text;
   }
@@ -273,6 +278,7 @@ function sendChat() {
   const msg = chatInput.value.trim();
   chatInput.value = "";
   appendMsg(msg, "user");
+  chatHistory.push({ role: "user", content: msg });
 
   const loadingDiv = document.createElement("div");
   loadingDiv.className = "chat-msg assistant";
@@ -286,13 +292,16 @@ function sendChat() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       message: msg,
-      context: typeof chatContext !== "undefined" ? chatContext : {}
+      context: typeof chatContext !== "undefined" ? chatContext : {},
+      history: chatHistory.slice(-10)
     })
   })
     .then(r => r.json())
     .then(data => {
       document.getElementById("loading")?.remove();
-      appendMsg(data.reply || "(응답 없음)", "assistant");
+      const reply = data.reply || "(응답 없음)";
+      appendMsg(reply, "assistant");
+      chatHistory.push({ role: "assistant", content: reply });
     })
     .catch(() => {
       document.getElementById("loading")?.remove();

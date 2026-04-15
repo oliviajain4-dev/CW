@@ -795,14 +795,34 @@ async def chat(request: Request):
     data    = await request.json()
     message = data.get("message", "")
     context = data.get("context", {})
+    history = data.get("history", [])
     if not message:
         return JSONResponse({"error": "메시지가 없어요"}, status_code=400)
     try:
         from chatbot.llm_client import get_chatbot_response
-        reply = get_chatbot_response(message, context)
+        reply = get_chatbot_response(message, context, history)
         return JSONResponse({"reply": reply})
     except Exception as e:
         return JSONResponse({"reply": f"(오류: {e})"}, status_code=500)
+
+
+@app.post("/api/tts", name="api_tts")
+async def api_tts(request: Request):
+    _require_user(request)
+    data = await request.json()
+    text = data.get("text", "").strip()
+    if not text:
+        return JSONResponse({"error": "text is required"}, status_code=400)
+    try:
+        import base64
+        from chatbot.tts import clean_for_tts, synthesize_speech
+        cleaned = clean_for_tts(text)
+        pcm = await synthesize_speech(cleaned)
+        if not pcm:
+            return JSONResponse({"error": "TTS 실패"}, status_code=500)
+        return JSONResponse({"audio": base64.b64encode(pcm).decode()})
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/api/weather", name="api_weather")
@@ -920,7 +940,18 @@ async def api_recommend(request: Request, quick: bool = False):
 
         save_style_log(user.id, weather, style_rec, layering, comment, tpo)
 
-        full_result = {**quick_result, "comment": comment, "bubbles": bubbles}
+        user_profile_data = {
+            "name":        profile.get("name", ""),
+            "sensitivity": int(profile.get("sensitivity", 3)),
+            "height":      profile.get("height", ""),
+            "weight":      profile.get("weight", ""),
+            "body_type":   profile.get("body_type", "보통"),
+            "style_pref":  profile.get("style_pref", "캐주얼"),
+            "gender":      profile.get("gender", ""),
+            "tpo":         profile.get("tpo", "일상"),
+        }
+        full_result = {**quick_result, "comment": comment, "bubbles": bubbles,
+                       "user_profile": user_profile_data}
         _recommend_cache[cache_key_full] = {"data": full_result, "ts": time.time()}
         return JSONResponse(full_result)
     except Exception as e:

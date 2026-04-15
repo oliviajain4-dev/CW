@@ -146,11 +146,25 @@
 
 <!-- ④ 수석 디자이너 패널 -->
 <div class="panel" id="designerPanel">
-  <div class="panel-header">👨‍🎨 수석 디자이너
+  <div class="panel-header" id="designerPanelHeader">
+    <span class="designer-panel-title">
+      <span class="designer-emoji">👨‍🎨</span> 수석 디자이너
+    </span>
     <button class="panel-close" onclick="closePanel('designerPanel')">✕</button>
   </div>
   <div class="panel-body" id="designerBody">
-    <p class="empty-msg" style="color:#aaa;">⏳ AI 스타일링 분석 중...</p>
+    <!-- 대화 로그 -->
+    <div class="chat-window" id="designerChatWindow">
+      <p class="empty-msg" style="color:#aaa;font-size:12px;">⏳ AI 스타일링 분석 중...</p>
+    </div>
+    <!-- 음성 상태 표시 -->
+    <div id="designerVoiceStatus" style="
+  font-size:16px;font-weight:700;color:#7755aa;text-align:center;
+  padding:6px 12px;min-height:0;flex-shrink:0;
+  background:rgba(119,85,170,0.07);border-radius:10px;
+  margin:4px 0;letter-spacing:0.02em;
+  transition:all 0.2s;
+"></div>
   </div>
   <div class="resize-handle" data-dir="n"></div>
   <div class="resize-handle" data-dir="ne"></div>
@@ -238,27 +252,12 @@
 <div class="voice-bar" id="voiceBar">
   <div class="voice-chat-log" id="voiceChatLog" style="display:none;"></div>
   <div class="voice-controls-row">
-    <button id="voiceTtsToggle" class="voice-ctrl-btn" title="음성 on/off">🔊</button>
-    <button id="voiceReplayBtn" class="voice-ctrl-btn" title="다시 듣기">🔁</button>
-    <button id="voiceMicBtn"    class="voice-mic-btn"  title="마이크 ON/OFF">🎙️</button>
+    <button id="voiceMicBtn" class="voice-mic-btn" title="대화 시작/종료">ON</button>
     <div class="voice-speak-wave" id="voiceSpeakWave">
       <span></span><span></span><span></span><span></span><span></span>
     </div>
-    <button id="voiceStopBtn"   class="voice-ctrl-btn" title="멈추기">⏹</button>
-    <button id="voiceTextBtn"   class="voice-ctrl-btn" title="전문 보기">📄</button>
   </div>
   <div class="voice-status" id="voiceStatus">마이크가 꺼져 있어요</div>
-</div>
-
-<!-- ── 전문 텍스트 패널 ── -->
-<div class="voice-text-panel" id="voiceTextPanel">
-  <div class="voice-text-header">
-    수석 디자이너 코멘트
-    <span onclick="VoiceEngine.toggleTextPanel()">✕</span>
-  </div>
-  <div class="voice-text-body" id="voiceTextBody">
-    <p style="color:#ccc;">코디 추천이 로드되면 여기에 표시됩니다.</p>
-  </div>
 </div>
 
 {% endblock %}
@@ -271,7 +270,15 @@
       {% for item in wardrobe_items %}
       {"category":"{{ item['category'] }}","item_type":"{{ item['item_type'] }}","warmth":{{ item['warmth'] }},"texture":"{{ item['texture'] }}"}{% if not loop.last %},{% endif %}
       {% endfor %}
-    ]
+    ],
+    user_profile: {
+      name:       "{{ profile.get('name', '') }}",
+      sensitivity: {{ profile.get('sensitivity', 3) }},
+      height:     "{{ profile.get('height', '') }}",
+      body_type:  "{{ profile.get('body_type', '보통') }}",
+      style_pref: "{{ profile.get('style_pref', '캐주얼') }}",
+      gender:     "{{ profile.get('gender', '') }}"
+    }
   };
 
   // ── 날씨·추천·AI 코멘트 비동기 로딩 ──────────────────────────────
@@ -350,34 +357,46 @@
       <div class="detail-item"><span class="detail-icon">👜</span><div><strong>악세서리</strong><p>${style_rec.acc_rec}</p></div></div>`;
   }
 
-  // ── 수석 디자이너 패널 — 코멘트만 ──────────────────────────────
+  // ── 수석 디자이너 패널 — 코멘트를 첫 번째 대화 버블로 ──────────
   function fillDesignerPanel(comment) {
-    const el = document.getElementById('designerBody');
-    const commentHtml = (typeof marked !== "undefined")
+    const win = document.getElementById('designerChatWindow');
+    if (!win) return;
+
+    // 로딩 메시지 제거
+    win.innerHTML = '';
+
+    // 코멘트를 assistant 버블로 추가
+    const commentHtml = (typeof marked !== 'undefined')
       ? marked.parse(comment)
       : comment.replace(/\n/g, '<br>');
-    el.innerHTML = `
-      <div class="designer-header">
-        <div class="designer-avatar">👨‍🎨</div>
-        <div><strong style="font-size:13px;">수석 디자이너</strong><span class="designer-badge">30년 경력</span></div>
-      </div>
-      <div class="designer-comment-wrap collapsed">
-        <div class="designer-comment">${commentHtml}</div>
-        <div class="designer-fade"></div>
-      </div>
-      <button class="designer-toggle-btn" onclick="toggleDesignerComment(this)">자세히 보기 ▼</button>`;
+    const div = document.createElement('div');
+    div.className = 'chat-msg assistant';
+    div.innerHTML = commentHtml;
+    win.appendChild(div);
+    win.scrollTop = win.scrollHeight;
 
-    // 음성으로 읽어주기 + 전문 패널 + 팁 말풍선 업데이트
+    // 오늘의 코디 코멘트 저장 — 마이크 ON 시 GREETING에서 참조
+    if (typeof chatContext !== 'undefined') chatContext.outfit_comment = comment;
+
+    // 전문 패널 업데이트
     if (typeof VoiceEngine !== 'undefined') {
       VoiceEngine.setTextContent(commentHtml);
-      VoiceEngine.autoSpeak(comment);
     }
-  }
-
-  function toggleDesignerComment(btn) {
-    const wrap = btn.previousElementSibling;
-    const collapsed = wrap.classList.toggle('collapsed');
-    btn.textContent = collapsed ? '자세히 보기 ▼' : '간략히 보기 ▲';
+    // 마이크 OFF 상태일 때만 자동 읽기 (마이크 ON이면 voice chat이 읽어줌)
+    if (!_voiceActive) {
+      fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: comment })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.audio && typeof enqueuePCM !== 'undefined') enqueuePCM(data.audio);
+        })
+        .catch(() => {
+          if (typeof VoiceEngine !== 'undefined') VoiceEngine.autoSpeak(comment);
+        });
+    }
   }
 
   // ── 쇼핑 패널 — 별도 로드 ───────────────────────────────────────
@@ -458,6 +477,8 @@
       fillStylePanel(style_rec, wardrobe_matches);
       chatContext.weather_label     = style_rec.condition_label;
       chatContext.recommended_items = style_rec.recommended_items.join(', ');
+      chatContext.weather           = weather || {};
+      if (data.user_profile) chatContext.user_profile = data.user_profile;
     })
     .catch(() => {
       ['weatherBody','styleBody'].forEach(id => {
@@ -505,6 +526,10 @@
   .voice-log-assistant { text-align:left;  color:#c9d1e8; font-size:13px; margin:4px 0; }
 </style>
 <script>
+// IIFE 바깥 — reconnect 시에도 대화 기억 유지
+let _savedMessages = [];
+let _voiceActive = false;  // fillDesignerPanel에서 마이크 상태 확인용
+
 (function () {
   'use strict';
 
@@ -531,6 +556,7 @@
   let ws           = null;
   let recognition  = null;
   let reconnTimer  = null;
+  let _recognizing = false;
 
   // ── 오디오 재생 ────────────────────────────────────────────────
   const OUT_SR    = 24000;
@@ -578,33 +604,133 @@
 
   function updateUI(s) {
     const labels = {
-      off:        '마이크가 꺼져 있어요',
-      listening:  '듣는 중...',
-      processing: '생각하는 중...',
-      speaking:   '말하는 중...',
+      off:        '',
+      listening:  '🎙 듣는 중...',
+      processing: '💭 생각하는 중...',
+      speaking:   '🔊 말하는 중...',
     };
-    if (statusEl) statusEl.textContent = labels[s] ?? labels.off;
+    if (statusEl) statusEl.textContent = labels[s] ?? '';
     if (waveEl)   waveEl.style.display = s === 'speaking' ? 'flex' : 'none';
+    micBtn.textContent = inVoice ? 'OFF' : 'ON';
     micBtn.classList.toggle('voice-on',  inVoice);
     micBtn.classList.toggle('voice-off', !inVoice);
+    _voiceActive = inVoice;
+    const ds = document.getElementById('designerVoiceStatus');
+    if (ds) ds.textContent = labels[s] ?? '';
+  }
+
+  function buildShopCards(text) {
+    const linkRe = /\[([^\]]+)\]\((https?:\/\/[^)]*musinsa[^)]*)\)/g;
+    const cards  = [];
+    let m;
+    while ((m = linkRe.exec(text)) !== null) {
+      cards.push({ name: m[1], url: m[2] });
+    }
+    if (!cards.length) return null;
+
+    const CAT_MAP = {
+      상의:   { emoji: '👕', color: '#f472b6' },
+      하의:   { emoji: '👖', color: '#60a5fa' },
+      아우터: { emoji: '🧥', color: '#fb923c' },
+      신발:   { emoji: '👟', color: '#4ade80' },
+      가방:   { emoji: '👜', color: '#a78bfa' },
+    };
+
+    function guessCategory(name) {
+      if (/티셔츠|맨투맨|후드|셔츠|니트|블라우스|가디건|크롭/.test(name)) return '상의';
+      if (/청바지|슬랙스|팬츠|스커트|반바지|바지|데님/.test(name)) return '하의';
+      if (/코트|재킷|자켓|점퍼|패딩|바람막이|트렌치|아우터/.test(name)) return '아우터';
+      if (/스니커즈|신발|부츠|로퍼|샌들|슬리퍼|힐|운동화/.test(name)) return '신발';
+      if (/가방|백팩|숄더|크로스|토트|클러치/.test(name)) return '가방';
+      return null;
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;gap:8px;margin-top:8px;overflow-x:auto;padding-bottom:4px;';
+
+    cards.forEach(({ name, url }) => {
+      const cat = guessCategory(name);
+      const { emoji, color } = CAT_MAP[cat] || { emoji: '🛍', color: '#a78bfa' };
+
+      const card = document.createElement('a');
+      card.href   = url;
+      card.target = '_blank';
+      card.rel    = 'noopener';
+      card.style.cssText = [
+        'display:flex', 'flex-direction:column', 'align-items:center',
+        'width:72px', 'flex-shrink:0', 'text-decoration:none',
+        'background:rgba(255,255,255,0.04)',
+        'border:1px solid rgba(255,255,255,0.1)',
+        'border-radius:12px', 'padding:8px 4px 6px', 'gap:4px',
+        'transition:background 0.15s', 'cursor:pointer',
+      ].join(';');
+      card.addEventListener('mouseover', () => { card.style.background = color + '22'; });
+      card.addEventListener('mouseout',  () => { card.style.background = 'rgba(255,255,255,0.04)'; });
+
+      const emojiEl = document.createElement('div');
+      emojiEl.style.cssText = `font-size:22px;width:42px;height:42px;border-radius:10px;background:${color}33;display:flex;align-items:center;justify-content:center;`;
+      emojiEl.textContent = emoji;
+
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size:9px;color:#ccc;text-align:center;line-height:1.3;max-width:64px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;';
+      nameEl.textContent = name;
+
+      const badge = document.createElement('div');
+      badge.style.cssText = `font-size:8px;color:${color};font-weight:700;`;
+      badge.textContent = '무신사 →';
+
+      card.append(emojiEl, nameEl, badge);
+      wrap.appendChild(card);
+    });
+
+    return wrap;
   }
 
   function addLog(text, role) {
-    if (!chatLog || !text) return;
-    chatLog.style.display = 'block';
-    const div = document.createElement('div');
-    div.className   = 'voice-log-' + role;
-    div.textContent = text;
-    chatLog.appendChild(div);
-    chatLog.scrollTop = chatLog.scrollHeight;
+    if (!text) return;
+    // _savedMessages 누적 (IIFE 밖 변수)
+    _savedMessages.push({ role: (role === 'assistant' ? 'assistant' : 'user'), content: text });
+    if (_savedMessages.length > 20) _savedMessages = _savedMessages.slice(-20);
+
+    // 기존 voiceBar 로그 (숨김 유지, 호환성)
+    if (chatLog) {
+      const d = document.createElement('div');
+      d.className   = 'voice-log-' + role;
+      d.textContent = text;
+      chatLog.appendChild(d);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+    // 디자이너 패널 대화 로그
+    const win = document.getElementById('designerChatWindow');
+    if (win) {
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + (role === 'assistant' ? 'assistant' : 'user');
+      if (role === 'assistant') {
+        const html = (typeof marked !== 'undefined')
+          ? marked.parse(text)
+          : text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+              '<a href="$2" target="_blank" rel="noopener" style="color:#c0408a;">$1</a>');
+        div.innerHTML = html;
+      } else {
+        div.textContent = text;
+      }
+      win.appendChild(div);
+      const shopCards = buildShopCards(text);
+      if (shopCards) win.appendChild(shopCards);
+      win.scrollTop = win.scrollHeight;
+    }
   }
 
   // ── 컨텍스트 빌드 ──────────────────────────────────────────────
   function buildCtx() {
     const c = (typeof chatContext !== 'undefined') ? chatContext : {};
     return {
-      wardrobe:      c.wardrobe       || [],
-      weather_label: c.weather_label  || '',
+      wardrobe:       c.wardrobe       || [],
+      weather_label:  c.weather_label  || '',
+      weather:        c.weather        || {},
+      tpo:            c.tpo            || '일상',
+      user_profile:   c.user_profile   || {},
+      outfit_comment: c.outfit_comment || '',
     };
   }
 
@@ -615,7 +741,11 @@
 
     ws.onopen = () => {
       if (inVoice) {
-        ws.send(JSON.stringify({ type: 'start_conversation', context: buildCtx() }));
+        ws.send(JSON.stringify({
+          type: 'start_conversation',
+          context: buildCtx(),
+          prev_messages: _savedMessages,
+        }));
       }
     };
 
@@ -626,7 +756,7 @@
         serverState = msg.value;
         if (msg.value === 'listening') {
           updateUI('listening');
-          startRecognition();
+          if (!_recognizing) startRecognition();
         } else if (msg.value === 'processing') {
           updateUI('processing');
         } else if (msg.value === 'speaking') {
@@ -676,38 +806,71 @@
         ws.send(JSON.stringify({ type: 'user_text', text }));
     };
 
+    recognition.onstart = () => { _recognizing = true; };
+
     // 인식 종료 → listening 상태면 재시작
     recognition.onend = () => {
+      _recognizing = false;
       if (inVoice && serverState === 'listening') startRecognition();
     };
 
     // no-speech 오류: 재시작 / 그 외: 무시
     recognition.onerror = (e) => {
+      _recognizing = false;
       if (e.error === 'no-speech' && inVoice && serverState === 'listening')
         startRecognition();
     };
   }
 
   function startRecognition() {
-    if (!recognition || !inVoice) return;
+    if (!recognition || !inVoice || _recognizing) return;
     try { recognition.start(); } catch (_) {}
+  }
+
+  function stopVoiceSession() {
+    if (!inVoice) return;
+    inVoice     = false;
+    serverState = 'idle';
+    updateUI('off');
+
+    if (recognition) { try { recognition.stop(); } catch (_) {} recognition = null; }
+    stopAudio();
+
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'end_conversation' }));
+      ws.close();
+    }
+    ws = null;
+    if (reconnTimer) { clearTimeout(reconnTimer); reconnTimer = null; }
   }
 
   // ── ON / OFF 토글 ──────────────────────────────────────────────
   micBtn.addEventListener('click', () => {
     if (!inVoice) {
-      // ── 마이크 ON ──────────────────────────────────────────
-      inVoice     = true;
-      serverState = 'listening';
-      updateUI('listening');
-      chatLog && (chatLog.style.display = 'block');
-
-      setupRecognition();
-      connectWS();
-      // ws.onopen에서 start_conversation 전송 + startRecognition 호출됨
+      // ── 마이크 ON — 날씨·프로필 재조회 후 WebSocket 연결 ──────
+      fetch('/api/recommend?quick=true')
+        .then(r => r.json())
+        .then(data => {
+          if (data.style_rec) {
+            chatContext.weather_label     = data.style_rec.condition_label;
+            chatContext.recommended_items = (data.style_rec.recommended_items || []).join(', ');
+            chatContext.weather           = data.weather || {};
+          }
+          if (data.user_profile) chatContext.user_profile = data.user_profile;
+        })
+        .catch(() => {})
+        .finally(() => {
+          stopAudio();  // 디자이너 패널 자동 읽기 중단
+          inVoice     = true;
+          serverState = 'listening';
+          updateUI('listening');
+          setupRecognition();
+          connectWS();
+        });
 
     } else {
       // ── 마이크 OFF ─────────────────────────────────────────
+      _savedMessages = [];
       inVoice     = false;
       serverState = 'idle';
       updateUI('off');
