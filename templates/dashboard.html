@@ -289,6 +289,7 @@
   const userProfile = {
     height: {{ profile.get('height', 165) | int if profile else 165 }},
     weight: {{ profile.get('weight', 57)  | int if profile else 57  }},
+    gender: "{{ profile.get('gender', '여성') if profile else '여성' }}",
   };
   const chatContext = {
     tpo: "{{ profile.get('tpo', '일상') }}",
@@ -410,49 +411,53 @@
   const TYPE_ICON  = { missing: '❗', upgrade: '⬆️', trend: '✨' };
 
   // ── 캘린더 일정 로드 ──────────────────────────────────────────────
-  let _calendarLoaded = false;
   function loadCalendar() {
-    if (_calendarLoaded) return;
-    _calendarLoaded = true;
     const el = document.getElementById('calendarBody');
     if (!el) return;
 
     fetch('/api/calendar')
       .then(r => r.json())
       .then(data => {
-        if (data.error && !data.events.length) {
+        if (data.error && (!data.days || !data.days.length)) {
           el.innerHTML = `
             <div style="text-align:center;padding:16px 8px;">
               <div style="font-size:32px;margin-bottom:8px;">📅</div>
-              <p style="color:#aaa;font-size:13px;margin-bottom:12px;">구글 계정으로 로그인하면<br>오늘 일정을 자동으로 불러와요</p>
+              <p style="color:#aaa;font-size:13px;margin-bottom:12px;">구글 계정으로 로그인하면<br>이번 주 일정을 자동으로 불러와요</p>
               <a href="/auth/google" class="btn btn-primary btn-full">🔗 구글 캘린더 연동</a>
             </div>`;
           return;
         }
-        if (!data.events || data.events.length === 0) {
-          el.innerHTML = '<p class="empty-msg" style="color:#aaa;">오늘 등록된 일정이 없어요 🙂</p>';
+        if (!data.days || !data.days.length) {
+          el.innerHTML = '<p class="empty-msg" style="color:#aaa;">이번 주 등록된 일정이 없어요 🙂</p>';
           return;
         }
 
+        const DAY = ['일','월','화','수','목','금','토'];
         let html = '';
         if (data.auto_tpo) {
-          html += `<div style="background:rgba(160,176,255,0.15);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#a0b0ff;">
+          html += `<div style="background:rgba(160,176,255,0.15);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#3a3a6e;">
             ✨ 오늘 TPO 자동 설정: <strong>${data.auto_tpo}</strong>
           </div>`;
         }
-        data.events.forEach(ev => {
-          const time = ev.start.includes('T')
-            ? new Date(ev.start).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})
-            : '종일';
-          const loc = ev.location ? `<span style="color:#888;font-size:11px;"> 📍${ev.location}</span>` : '';
-          html += `
-            <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.07);">
-              <div style="min-width:38px;text-align:center;font-size:11px;color:#a0b0ff;font-weight:600;padding-top:2px;">${time}</div>
-              <div>
-                <div style="font-size:13px;color:#e0e8ff;">${ev.title}</div>
-                ${loc}
-              </div>
-            </div>`;
+        data.days.forEach(day => {
+          const d = new Date(day.date + 'T00:00:00');
+          const label = day.is_today
+            ? `<strong>오늘</strong> (${d.getMonth()+1}/${d.getDate()} ${DAY[d.getDay()]})`
+            : `${d.getMonth()+1}/${d.getDate()} ${DAY[d.getDay()]}`;
+          html += `<div style="margin-bottom:10px;">
+            <div style="font-size:11px;font-weight:700;color:${day.is_today ? '#5c6bc0' : '#888'};margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid rgba(0,0,0,0.08);">${label}</div>`;
+          day.events.forEach(ev => {
+            const time = ev.start.includes('T')
+              ? new Date(ev.start).toLocaleTimeString('ko-KR', {hour:'2-digit', minute:'2-digit'})
+              : '종일';
+            const loc = ev.location ? `<span style="color:#999;font-size:10px;"> 📍${ev.location}</span>` : '';
+            html += `
+              <div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0;">
+                <div style="min-width:34px;font-size:10px;color:#7b8cde;font-weight:600;padding-top:2px;">${time}</div>
+                <div style="font-size:12px;color:#1a1a2e;">${ev.title}${loc}</div>
+              </div>`;
+          });
+          html += `</div>`;
         });
         el.innerHTML = html;
       })
@@ -869,10 +874,10 @@ let _bodyMesh = null;
 
 // GLB 내 메쉬 이름 후보 (카테고리별)
 const CLOTH_MESH_CANDIDATES = {
-  '상의':   ['Cloth_Layer', 'Ch22_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
-  '하의':   ['Cloth_Layer', 'Ch22_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
-  '아우터': ['Cloth_Layer', 'Ch22_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
-  '원피스': ['Cloth_Layer', 'Ch22_Dress',  'Dress',  'dress',  'Body_Dress'],
+  '상의':   ['Cloth_Layer', 'Ch22_Shirt',  'Ch01_Shirt',  'Shirt',  'shirt',  'Top',    'Torso',  'Body_Shirt'],
+  '하의':   ['Cloth_Layer', 'Ch22_Pants',  'Ch01_Pants',  'Pants',  'pants',  'Bottom', 'Legs',   'Body_Pants'],
+  '아우터': ['Cloth_Layer', 'Ch22_Jacket', 'Ch01_Jacket', 'Jacket', 'jacket', 'Outer',  'Coat',   'Body_Jacket'],
+  '원피스': ['Cloth_Layer', 'Ch22_Dress',  'Ch01_Dress',  'Dress',  'dress',  'Body_Dress'],
 };
 
 // ── UV 정면투영 ───────────────────────────────────────────────
@@ -973,8 +978,9 @@ window.meganResetColor = function(category) {
 };
 
 // ── GLB 캐릭터 로드 ──────────────────────────────────────────
+const _charGlb = (userProfile.gender === '남성') ? '/static/models/brian.glb' : '/static/models/megan.glb';
 gltfLoader.load(
-  '/static/models/megan.glb',
+  _charGlb,
   (gltf) => {
     const model = gltf.scene;
     scene.add(model);
@@ -1006,7 +1012,7 @@ gltfLoader.load(
         if (!obj.isMesh) return;
         allMeshNames.push(obj.name);
         if (obj.name === 'Cloth_Layer') clothLayerMesh = obj;
-        if (obj.name === 'Ch22_Body')   _bodyMesh = obj;
+        if (obj.name === 'Ch22_Body' || obj.name === 'Ch01_Body') _bodyMesh = obj;
       });
 
       // 2nd pass: Cloth_Layer 있으면 모든 카테고리를 그것으로 연결
@@ -1038,16 +1044,19 @@ gltfLoader.load(
     console.log('[Megan] 전체 메쉬 목록:', allMeshNames.length, allMeshNames);
 
     // ── GLB PBR 재질 보정: 반짝임 제거 + 의상 베이지 기본색 + 머리카락 투명도 ──
+    const _lc = (s) => s.toLowerCase();
     model.traverse(obj => {
       if (!obj.isMesh) return;
       const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const n = obj.name;
 
       // 의상 메쉬: UV 정면투영 + 베이지 중립색 (Cloth_Layer는 숨김)
-      const clothMeshNames = ['Cloth_Layer', 'Ch22_Shirt', 'Ch22_Pants', 'Ch22_Jacket', 'Ch22_Dress'];
-      if (clothMeshNames.includes(obj.name)) {
+      const isCloth = n === 'Cloth_Layer'
+        || /^Ch\d+_(Shirt|Pants|Jacket|Dress|Shorts|Skirt|Coat)/i.test(n);
+      if (isCloth) {
         _applyFrontProjectionUV(obj);
-        if (obj.name === 'Cloth_Layer') {
-          obj.visible = false;   // 텍스처 입히기 전까지 숨김
+        if (n === 'Cloth_Layer') {
+          obj.visible = false;
         } else {
           obj.material = new THREE.MeshStandardMaterial({
             color: 0xd8cfc4, metalness: 0, roughness: 0.9,
@@ -1057,7 +1066,8 @@ gltfLoader.load(
       }
 
       // 머리카락 / 속눈썹: 알파 투명도 처리
-      if (obj.name === 'Ch22_Hair' || obj.name === 'Ch22_Eyelashes') {
+      const isHair = /hair|eyelash/i.test(n);
+      if (isHair) {
         mats.forEach(mat => {
           if (!mat) return;
           mat.transparent = true;
@@ -1071,10 +1081,14 @@ gltfLoader.load(
         return;
       }
 
+      // 나머지 (피부, 얼굴 등): 투명도 강제 해제
       mats.forEach(mat => {
         if (!mat) return;
-        mat.metalness = 0;
-        mat.roughness = 0.85;
+        mat.transparent = false;
+        mat.opacity     = 1;
+        mat.depthWrite  = true;
+        mat.metalness   = 0;
+        mat.roughness   = 0.85;
         mat.needsUpdate = true;
       });
     });
@@ -1126,16 +1140,28 @@ gltfLoader.load(
     mixer = new THREE.AnimationMixer(model);
 
     // GLB 애니메이션 클립 로드
+    const isBrian = (userProfile.gender === '남성');
     const loadClip = (url) => new Promise((resolve, reject) =>
       gltfLoader.load(url,
-        g => g.animations?.length ? resolve(g.animations[0]) : reject(new Error('클립 없음: ' + url)),
+        g => {
+          if (!g.animations?.length) return reject(new Error('클립 없음: ' + url));
+          const clip = g.animations[0];
+          // 뼈대 이름 맞추기
+          // 액션파일: mixamorig2 / 메간: mixamorig2 (그대로) / 브라이언: mixamorig12
+          if (isBrian) {
+            clip.tracks.forEach(track => {
+              track.name = track.name.replace(/mixamorig2/g, 'mixamorig12');
+            });
+          }
+          resolve(clip);
+        },
         null, reject)
     );
 
     Promise.all([
-      loadClip('/static/models/megan_action1.glb'),
-      loadClip('/static/models/megan_action2.glb'),
-      loadClip('/static/models/megan_action3.glb'),
+      loadClip('/static/models/action1.glb'),
+      loadClip('/static/models/action2.glb'),
+      loadClip('/static/models/action3.glb'),
     ]).then(([c1, c2, c3]) => {
       _animActions = [
         mixer.clipAction(c1),
@@ -1161,6 +1187,7 @@ gltfLoader.load(
       // 강제 첫프레임 적용 제거 → FBX 루트모션 스케일 차이로 캐릭터 날아가는 문제 방지
       _animReady = true;
       console.log('[Megan] 준비 완료. 등록된 의상 메쉬:', Object.keys(_clothRefs));
+      setTimeout(_triggerAnim, 800);
     }).catch(err => {
       console.error('[Megan] 애니메이션 로드 실패:', err);
     }).finally(() => {

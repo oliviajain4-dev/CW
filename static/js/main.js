@@ -58,6 +58,7 @@ function initDraggable(panel) {
   header.addEventListener('mousedown', e => {
     if (e.target.classList.contains('panel-close')) return;
     dragging = true;
+    bringToFront(panel);
     const rect = panel.getBoundingClientRect();
     // 현재 위치를 left/top으로 고정 (right/bottom 해제)
     panel.style.left   = rect.left + 'px';
@@ -177,6 +178,13 @@ function wearItem(el) {
   if (window.meganApplyTexture) window.meganApplyTexture(category, src, el.dataset.texture || 'cotton');
 }
 
+/* ── 패널 z-index 관리 (클릭한 패널이 최상단) ── */
+let _panelZ = 250;
+function bringToFront(panel) {
+  _panelZ++;
+  panel.style.zIndex = _panelZ;
+}
+
 /* ── 패널 토글 ──────────────────────────────── */
 function togglePanel(id) {
   const panel = document.getElementById(id);
@@ -194,6 +202,7 @@ function togglePanel(id) {
     closePanel(id);
   } else {
     panel.classList.add('open');
+    bringToFront(panel);
     // 처음 열릴 때 한 번만 드래그 초기화
     if (!panel._draggable) { initDraggable(panel); panel._draggable = true; }
     initResizable(panel);

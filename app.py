@@ -120,6 +120,7 @@ if _GOOGLE_ENABLED:
         client_kwargs={
             "scope": "openid email profile https://www.googleapis.com/auth/calendar.readonly",
             "access_type": "online",
+            "prompt": "consent",
         },
     )
 
@@ -565,15 +566,17 @@ async def auth_google_callback(request: Request):
 
 @app.get("/api/calendar", name="api_calendar")
 async def api_calendar(request: Request):
-    """오늘 구글 캘린더 일정 반환. 구글 로그인 필요."""
+    """이번 주 구글 캘린더 일정 반환. 구글 로그인 필요."""
     _require_user(request)
     access_token = request.session.get("google_access_token")
     if not access_token:
-        return JSONResponse({"events": [], "error": "구글 로그인 필요"}, status_code=200)
-    from chatbot.calendar_client import get_today_events, tpo_from_events
-    events = get_today_events(access_token)
-    auto_tpo = tpo_from_events(events)
-    return JSONResponse({"events": events, "auto_tpo": auto_tpo})
+        return JSONResponse({"days": [], "error": "구글 로그인 필요"}, status_code=200)
+    from chatbot.calendar_client import get_week_events, get_today_events, tpo_from_events
+    days = get_week_events(access_token)
+    # TPO는 오늘 일정 기준으로 추론
+    today_events = get_today_events(access_token)
+    auto_tpo = tpo_from_events(today_events)
+    return JSONResponse({"days": days, "auto_tpo": auto_tpo})
 
 
 @app.get("/logout", name="logout")
