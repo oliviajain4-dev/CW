@@ -790,13 +790,28 @@ body {
   background: rgba(255,150,200,0.25);
 }
 
+/* 수석 디자이너 헤더 마이크 버튼 */
 #voiceMicBtn {
-  font-size: 14px !important;
+  width: 48px !important;
+  height: 28px !important;
+  min-width: 0 !important;
+  font-size: 12px !important;
   font-weight: 700 !important;
-  padding: 6px 14px !important;
-  border-radius: 20px !important;
-  min-width: 90px;
+  padding: 0 !important;
+  border-radius: 14px !important;
   letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.designer-mic-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.designer-wave {
+  transform: scale(0.7);
+  transform-origin: left center;
 }
 
 .chat-msg {

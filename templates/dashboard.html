@@ -21,9 +21,6 @@
     📅<span class="btn-label">일정</span>
   </button>
   <div class="sidebar-divider"></div>
-  <button class="sidebar-btn" onclick="togglePanel('chatPanel')" id="btn-chat">
-    💬<span class="btn-label">스타일 상담</span>
-  </button>
   <button class="sidebar-btn" onclick="togglePanel('profilePanel')" id="btn-profile">
     👤<span class="btn-label">내 정보</span>
   </button>
@@ -153,6 +150,12 @@
     <span class="designer-panel-title">
       <span class="designer-emoji">👨‍🎨</span> 수석 디자이너
     </span>
+    <div class="designer-mic-wrap">
+      <button id="voiceMicBtn" class="voice-mic-btn designer-mic-btn" title="대화 시작/종료">ON</button>
+      <div class="voice-speak-wave designer-wave" id="voiceSpeakWave" style="display:none;">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
     <button class="panel-close" onclick="closePanel('designerPanel')">✕</button>
   </div>
   <div class="panel-body" id="designerBody">
@@ -215,31 +218,6 @@
   <div class="resize-handle" data-dir="nw"></div>
 </div>
 
-<!-- ⑦ 채팅 패널 -->
-<div class="panel" id="chatPanel">
-  <div class="panel-header">💬 스타일 상담
-    <button class="panel-close" onclick="closePanel('chatPanel')">✕</button>
-  </div>
-  <div class="panel-body">
-    <div class="chat-window" id="chatWindow">
-      <div class="chat-msg assistant">
-        안녕하세요! 30년 경력 수석 디자이너예요 😊<br>오늘 코디나 스타일에 대해 뭐든 물어봐요!
-      </div>
-    </div>
-    <div class="chat-input-row">
-      <input type="text" id="chatInput" placeholder="예: 오늘 데이트 코디 추천해줘">
-      <button id="chatSend" class="btn btn-primary btn-sm">전송</button>
-    </div>
-  </div>
-  <div class="resize-handle" data-dir="n"></div>
-  <div class="resize-handle" data-dir="ne"></div>
-  <div class="resize-handle" data-dir="e"></div>
-  <div class="resize-handle" data-dir="se"></div>
-  <div class="resize-handle" data-dir="s"></div>
-  <div class="resize-handle" data-dir="sw"></div>
-  <div class="resize-handle" data-dir="w"></div>
-  <div class="resize-handle" data-dir="nw"></div>
-</div>
 
 <!-- ⑥ 프로필 패널 -->
 <div class="panel" id="profilePanel">
@@ -269,16 +247,10 @@
   <div class="resize-handle" data-dir="nw"></div>
 </div>
 
-<!-- ── 음성 어시스턴트 바 ── -->
-<div class="voice-bar" id="voiceBar">
+<!-- 음성 어시스턴트 바 — voiceChatLog·voiceStatus 참조용으로 유지, 화면엔 숨김 -->
+<div class="voice-bar" id="voiceBar" style="display:none;">
   <div class="voice-chat-log" id="voiceChatLog" style="display:none;"></div>
-  <div class="voice-controls-row">
-    <button id="voiceMicBtn" class="voice-mic-btn" title="대화 시작/종료">ON</button>
-    <div class="voice-speak-wave" id="voiceSpeakWave">
-      <span></span><span></span><span></span><span></span><span></span>
-    </div>
-  </div>
-  <div class="voice-status" id="voiceStatus">마이크가 꺼져 있어요</div>
+  <div class="voice-status" id="voiceStatus"></div>
 </div>
 
 {% endblock %}
@@ -387,6 +359,14 @@
   function fillDesignerPanel(comment) {
     const win = document.getElementById('designerChatWindow');
     if (!win) return;
+
+    // Claude가 raw JSON을 반환한 경우 comment 필드만 추출
+    if (typeof comment === 'string' && comment.trim().startsWith('{')) {
+      try {
+        const parsed = JSON.parse(comment);
+        if (parsed.comment) comment = parsed.comment;
+      } catch(e) {}
+    }
 
     // 로딩 메시지 제거
     win.innerHTML = '';
@@ -606,6 +586,8 @@
   }
   .voice-log-user      { text-align:right; color:#a0b0ff; font-size:13px; margin:4px 0; }
   .voice-log-assistant { text-align:left;  color:#c9d1e8; font-size:13px; margin:4px 0; }
+  /* 음성 채팅 로그는 수석 디자이너 패널에서만 표시 */
+  #voiceChatLog { display: none !important; }
 </style>
 <script>
 // IIFE 바깥 — reconnect 시에도 대화 기억 유지
@@ -948,6 +930,11 @@ let _voiceActive = false;  // fillDesignerPanel에서 마이크 상태 확인용
           updateUI('listening');
           setupRecognition();
           connectWS();
+          // 수석 디자이너 패널 자동 오픈
+          if (typeof togglePanel === 'function') {
+            const dp = document.getElementById('designerPanel');
+            if (dp && !dp.classList.contains('open')) togglePanel('designerPanel');
+          }
         });
 
     } else {

@@ -65,7 +65,7 @@ CW/                          ← 메인 .py 파일만 여기에
 ├── db.py                    ← DB 연결 모듈 (메인)
 ├── model.py                 ← 이미지 AI 분석 (메인)
 ├── make_flowchart.py        ← 흐름도 생성 메인 스크립트
-├── make_pdf.py              ← PDF 생성 메인 스크립트 (있을 경우)
+├── ui_mockup.html           ← UI 목업 (feat/ny2에서 추가)
 │
 ├── chatbot/                 ← 챗봇/추천 기능 모듈 전체
 │   ├── weather.py
@@ -73,14 +73,29 @@ CW/                          ← 메인 .py 파일만 여기에
 │   ├── weather_style_mapper.py
 │   ├── llm_client.py
 │   ├── recommend.py
+│   ├── tts.py               ← Google TTS 공용 모듈 (clean_for_tts 포함)
 │   └── weather_main.py
+│
+├── voice/                   ← 음성 어시스턴트 모듈
+│   ├── router.py            ← WebSocket /voice/ws 엔드포인트
+│   └── static/
 │
 ├── flowchart/               ← 흐름도 기능의 모든 산출물
 │   ├── flowchart_2D.png
-│   └── flowchart_3D.png
+│   ├── flowchart_3D.png
+│   └── flowchart_3d_service_flow.png
 │
+├── promo/                   ← 홍보용 이미지/자료
 ├── templates/               ← FastAPI HTML 템플릿
 ├── static/                  ← CSS, JS, 업로드 이미지
+│   ├── images/
+│   │   └── room_bg.png      ← 대시보드 배경 이미지
+│   ├── js/
+│   │   ├── main.js
+│   │   └── voice.js
+│   └── css/
+│       ├── style.css        ← 배경: url('/static/images/room_bg.png')
+│       └── voice.css
 ├── docker/                  ← Docker 관련 파일 (init.sql)
 └── .devcontainer/           ← VS Code Dev Container 설정
 ```
@@ -179,14 +194,19 @@ Claude에게 새 기능 구현을 요청하면 Claude가 자동으로:
 
 | 기능 | 패키지 |
 |---|---|
-| 웹 서버 | `fastapi`, `uvicorn` |
-| AI 추천 | `anthropic` |
+| 웹 서버 | `fastapi`, `uvicorn`, `flask`, `werkzeug` |
+| AI 추천 | `anthropic`, `openai` |
 | 날씨 API | `requests` |
 | 환경변수 | `python-dotenv` |
-| 이미지 분석 (AI) | `torch`, `torchvision`, `transformers`, `open_clip_torch` |
-| 흐름도 생성 | `matplotlib`, `pillow`, `numpy` |
-| PDF 생성 | `reportlab` (있을 경우) |
-| DB | `psycopg2` 또는 `sqlite3` (내장) |
+| 이미지 분석 (AI) | `open_clip_torch`, `transformers`, `timm`, `pillow`, `numpy`, `scipy`, `opencv-python` |
+| 객체 탐지 | `ultralytics` (YOLO, feat/ny2에서 추가) |
+| 흐름도 생성 | `matplotlib` |
+| 데이터 처리 | `pandas`, `polars` (feat/ny2에서 추가), `pydantic`, `PyYAML` |
+| 인증 | `authlib==1.6.10`, `Flask-Login==0.6.3` |
+| 이미지 저장 | `cloudinary==1.44.1` |
+| HTTP 클라이언트 | `httpx` |
+| 음성 STT | `openai-whisper` |
+| DB | `psycopg2-binary` (PostgreSQL 15) |
 
 ---
 
@@ -198,8 +218,12 @@ Claude에게 새 기능 구현을 요청하면 Claude가 자동으로:
 
 현재 필요한 키:
 ```
-KMA_API_KEY=...       # 기상청 API (발급 완료)
-CLAUDE_API_KEY=...    # Anthropic Claude API (발급 완료)
+KMA_API_KEY=...            # 기상청 API (발급 완료)
+CLAUDE_API_KEY=...         # Anthropic Claude API (발급 완료)
+GOOGLE_TTS_API_KEY=...     # Google Cloud TTS (chatbot/tts.py)
+GOOGLE_CLIENT_ID=...       # Google OAuth 로그인
+GOOGLE_CLIENT_SECRET=...   # Google OAuth 로그인
+CLOUDINARY_URL=...         # 이미지 클라우드 저장
 ```
 
 ---
@@ -254,9 +278,44 @@ CLAUDE_API_KEY=...    # Anthropic Claude API (발급 완료)
 # Docker 실행
 docker-compose up --build
 
+# 로컬 직접 실행 (DB 없이 테스트)
+uvicorn app:app --host 0.0.0.0 --port 5000 --reload
+
 # 접속
 http://localhost:5000
 
 # 흐름도 재생성
 python make_flowchart.py   # → flowchart/ 폴더에 저장됨
 ```
+
+---
+
+## 브랜치 머지 이력 (feat/hj 기준)
+
+| 날짜 | 머지 브랜치 | 주요 변경 | 충돌 해결 |
+|---|---|---|---|
+| 2026-04-15 | `origin/feat/cs` | 구글 캘린더 연동, 브라이언 캐릭터 추가, 캘린더/패널 UX 개선 | requirements.txt — authlib 버전 충돌 → `1.6.10` 유지 |
+| 2026-04-15 | `origin/feat/ny2` | 수석디자이너 UI + 챗봇 최종 수정, ultralytics/polars 추가 | requirements.txt — pip freeze 덤프 vs 카테고리 형식 → 카테고리 형식 유지, 신규 패키지만 반영 |
+
+---
+
+## 주요 버그 수정 이력
+
+| 날짜 | 파일 | 문제 | 수정 내용 |
+|---|---|---|---|
+| 2026-04-15 | `static/css/style.css` | 대시보드 배경 이미지 안 나옴 | `feat/ny2` 머지 시 `room_bg.png` → `room_bf.png`로 파일명 변경됐으나 CSS는 미반영 → CSS 경로 수정 |
+
+---
+
+## 현재 확인된 미구현 기능 (DB 스키마는 있음)
+
+`docker/init.sql`에 테이블은 설계되어 있지만 Python 코드가 없는 기능:
+
+| 테이블 | 기능 | 상태 |
+|---|---|---|
+| `style_logs` | 코디 추천 로그 자동 저장 | DB 설계만 완료, 저장 코드 없음 |
+| `recommendation_items` | 추천 아이템 연결 | DB 설계만 완료 |
+| `top_outfits_by_weather` (VIEW) | 날씨별 인기 코디 집계 | DB 설계만 완료 |
+
+→ 좋아요/싫어요 피드백 기능 추가 시 위 테이블에 연동하면 됨
+

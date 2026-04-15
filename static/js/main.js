@@ -211,7 +211,7 @@ function togglePanel(id) {
       weatherPanel: 'btn-weather', stylePanel: 'btn-style',
       itemPanel: 'btn-item', designerPanel: 'btn-designer',
       shoppingPanel: 'btn-shopping',
-      chatPanel: 'btn-chat', profilePanel: 'btn-profile',
+      profilePanel: 'btn-profile',
       calendarPanel: 'btn-calendar'
     };
     const btn = document.getElementById(btnMap[id]);
@@ -227,7 +227,7 @@ function closePanel(id) {
     weatherPanel: 'btn-weather', stylePanel: 'btn-style',
     itemPanel: 'btn-item', designerPanel: 'btn-designer',
     shoppingPanel: 'btn-shopping',
-    chatPanel: 'btn-chat', profilePanel: 'btn-profile'
+    profilePanel: 'btn-profile'
   };
   const btn = document.getElementById(btnMap[id]);
   if (btn) btn.classList.remove('active');
@@ -260,68 +260,3 @@ if (imageInput) {
   });
 }
 
-/* ── 챗봇 ───────────────────────────────────── */
-const chatWindow = document.getElementById("chatWindow");
-const chatInput  = document.getElementById("chatInput");
-const chatSend   = document.getElementById("chatSend");
-let chatHistory  = [];
-
-function appendMsg(text, role) {
-  if (!chatWindow) return;
-  const div = document.createElement("div");
-  div.className = `chat-msg ${role}`;
-  if (role === "assistant") {
-    const html = (typeof marked !== "undefined")
-      ? marked.parse(text)
-      : text.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-          '<a href="$2" target="_blank" rel="noopener" style="color:#c0408a;">$1</a>');
-    div.innerHTML = html;
-  } else {
-    div.textContent = text;
-  }
-  chatWindow.appendChild(div);
-  chatWindow.scrollTop = chatWindow.scrollHeight;
-}
-
-function sendChat() {
-  if (!chatInput || !chatInput.value.trim()) return;
-  const msg = chatInput.value.trim();
-  chatInput.value = "";
-  appendMsg(msg, "user");
-  chatHistory.push({ role: "user", content: msg });
-
-  const loadingDiv = document.createElement("div");
-  loadingDiv.className = "chat-msg assistant";
-  loadingDiv.textContent = "...";
-  loadingDiv.id = "loading";
-  chatWindow.appendChild(loadingDiv);
-  chatWindow.scrollTop = chatWindow.scrollHeight;
-
-  fetch("/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message: msg,
-      context: typeof chatContext !== "undefined" ? chatContext : {},
-      history: chatHistory.slice(-10)
-    })
-  })
-    .then(r => r.json())
-    .then(data => {
-      document.getElementById("loading")?.remove();
-      const reply = data.reply || "(응답 없음)";
-      appendMsg(reply, "assistant");
-      chatHistory.push({ role: "assistant", content: reply });
-    })
-    .catch(() => {
-      document.getElementById("loading")?.remove();
-      appendMsg("오류가 발생했어요. 다시 시도해주세요.", "assistant");
-    });
-}
-
-if (chatSend) chatSend.addEventListener("click", sendChat);
-if (chatInput) {
-  chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); }
-  });
-}

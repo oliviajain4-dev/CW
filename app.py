@@ -947,9 +947,7 @@ async def api_recommend(request: Request, quick: bool = False):
         if quick:
             return JSONResponse(quick_result)
 
-        # ── AI 코멘트 + 패션뉴스 병렬 로드 ──────────────────────────
-        from chatbot.shopping import get_fashion_news
-
+        # ── AI 코멘트 로드 ───────────────────────────────────────────
         wardrobe_for_ai = [
             {"category": it["category"], "item_type": it["item_type"],
              "warmth": it.get("warmth", 0), "texture": it.get("texture", "미상")}
@@ -967,7 +965,7 @@ async def api_recommend(request: Request, quick: bool = False):
             if _detected:
                 tpo = _detected
 
-        trend_news = await asyncio.to_thread(get_fashion_news, style_pref)
+        trend_news: list = []
         outfit_result = await asyncio.to_thread(
             get_outfit_comment, weather, style_rec, layering, str(tpo),  # type: ignore[arg-type]
             profile or None, wardrobe_for_ai, trend_news, calendar_events
@@ -1035,7 +1033,7 @@ async def api_shopping(request: Request):
     user    = _require_user(request)
     profile = load_profile(user.id)
     try:
-        from chatbot.shopping import get_shopping_cards, get_fashion_news
+        from chatbot.shopping import get_shopping_cards
         from chatbot.weather_client import get_weather
         from chatbot.weather_style_mapper import get_style_recommendation
 
@@ -1069,10 +1067,9 @@ async def api_shopping(request: Request):
             weather["morning"]["sky"], weather["morning"]["pty"], sensitivity
         )
 
-        # 패션뉴스 + 쇼핑카드 생성 병렬화
-        trend_news = await asyncio.to_thread(get_fashion_news, style_pref)
+        # 쇼핑카드 생성
         cards = await asyncio.to_thread(
-            get_shopping_cards, all_items, style_rec, profile or None, trend_news
+            get_shopping_cards, all_items, style_rec, profile or None, []
         )
         return JSONResponse({"cards": cards})
     except Exception as e:
