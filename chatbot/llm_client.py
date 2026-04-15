@@ -173,6 +173,19 @@ layering_needed=True
     return {"comment": raw, "bubbles": {}}
 
 
+async def stream_chatbot_response(system_prompt: str, messages: list, max_tokens: int = 800):
+    """Claude 스트리밍 응답 생성기. voice/router.py에서 사용됩니다."""
+    client = anthropic.AsyncAnthropic(api_key=CLAUDE_API_KEY)
+    async with client.messages.stream(
+        model="claude-sonnet-4-6",
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=messages,
+    ) as stream:
+        async for chunk in stream.text_stream:
+            yield chunk
+
+
 def get_chatbot_response(user_message: str, context: dict = None,
                          history: list = None) -> str:
     """
@@ -189,11 +202,10 @@ def get_chatbot_response(user_message: str, context: dict = None,
 - 사용자가 뭘 물어봐도 자유롭게 대화해. 날씨·코디 외 일반 패션 고민도 OK.
 - 이전 대화 흐름을 기억하고 이어가. 단답 금지. 자연스럽게 주거니받거니 해.
 - 필요하면 되물어서 상황을 파악해.
-- 마크다운 사용 가능 (굵게, 기울임 등).
-- 응답은 상황에 따라 2~6문장 적절히. 너무 짧거나 너무 길지 않게.
-- 사용자 옷장에 없는 아이템이 필요할 때는 무신사 검색 링크를 마크다운 형식으로 제공해.
-  형식: [아이템명](https://www.musinsa.com/search/goods?keyword=검색어)
-  예: [화이트 맨투맨](https://www.musinsa.com/search/goods?keyword=화이트+맨투맨) 어때?
+- 마크다운, 굵게, 기울임, 번호 목록, 불릿, 별표, 밑줄, 대시, 슬래시, 괄호 등 모든 특수기호 사용 금지.
+- 모든 답변은 순수 한국어 문장으로만 작성. 알파벳 단 한 글자도 사용 금지.
+- 사용자 옷장에 없는 아이템이 필요할 때는 무신사 검색 링크를 일반 문장으로 자연스럽게 제공해.
+  형식: 무신사에서 검색할 때는 링크를 텍스트로 제시하되, 마크다운 문법은 사용하지 말 것.
 - 날씨·코디 주제로만 제한하지 마. 사용자가 다른 얘기 하면 자연스럽게 받아줘.
 - 오늘 날씨 얘기는 맥락상 필요할 때만. 매 대화마다 날씨부터 꺼내지 마."""
 

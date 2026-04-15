@@ -32,10 +32,10 @@ import json
 import os
 from typing import Optional
 
-import anthropic
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
+from chatbot.llm_client import stream_chatbot_response
 from chatbot.tts import _SENTENCE_END, clean_for_tts, synthesize_speech
 
 router = APIRouter(prefix="/voice", tags=["voice"])
@@ -264,43 +264,36 @@ async def voice_ws(websocket: WebSocket):
 
             call_messages = list(messages) + [{"role": "user", "content": task_prompt}]
 
-            claude_client    = anthropic.AsyncAnthropic(api_key=os.getenv("CLAUDE_API_KEY"))
             text_buf         = ""
             full_text        = ""
             speaking_started = False
 
-            async with claude_client.messages.stream(
-                model="claude-sonnet-4-6",
-                max_tokens=_MAX_TOKENS,
-                system=system,
-                messages=call_messages,
-            ) as stream:
-                async for chunk in stream.text_stream:
-                    if interrupted:
-                        break
-                    text_buf  += chunk
-                    full_text += chunk
+            async for chunk in stream_chatbot_response(system, call_messages, max_tokens=_MAX_TOKENS):
+                if interrupted:
+                    break
+                text_buf  += chunk
+                full_text += chunk
 
-                    while True:
-                        m = _SENTENCE_END.search(text_buf)
-                        if not m:
-                            break
-                        sentence = text_buf[: m.end()].strip()
-                        text_buf = text_buf[m.end():].strip()
-                        if not sentence:
-                            continue
-                        cleaned = clean_for_tts(sentence)
-                        if not cleaned:
-                            continue
-                        try:
-                            if not speaking_started:
-                                await _set_state("speaking")
-                                speaking_started = True
-                            pcm = await synthesize_speech(cleaned)
-                            if pcm:
-                                await _send({"type": "audio_chunk", "data": base64.b64encode(pcm).decode()})
-                        except Exception:
-                            pass
+                while True:
+                    m = _SENTENCE_END.search(text_buf)
+                    if not m:
+                        break
+                    sentence = text_buf[: m.end()].strip()
+                    text_buf = text_buf[m.end():].strip()
+                    if not sentence:
+                        continue
+                    cleaned = clean_for_tts(sentence)
+                    if not cleaned:
+                        continue
+                    try:
+                        if not speaking_started:
+                            await _set_state("speaking")
+                            speaking_started = True
+                        pcm = await synthesize_speech(cleaned)
+                        if pcm:
+                            await _send({"type": "audio_chunk", "data": base64.b64encode(pcm).decode()})
+                    except Exception:
+                        pass
 
             if interrupted:
                 return
