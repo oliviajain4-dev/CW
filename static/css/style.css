@@ -585,7 +585,7 @@ body {
 #weatherPanel  { top: 64px; left: 88px; width: 260px; }
 #stylePanel    { top: 64px; left: 88px; width: 280px; }
 #itemPanel     { top: 64px; left: 88px; width: 300px; }
-#designerPanel { top: 64px; left: 88px; width: 300px; }
+#designerPanel { top: 64px; left: 88px; width: 460px !important; min-width: 320px; height: 560px !important; min-height: 300px; }
 #shoppingPanel { top: 64px; left: 88px; width: 300px; }
 #calendarPanel { top: 64px; left: 88px; width: 280px; min-height: 200px; }
 #calendarPanel .panel-header {
@@ -738,9 +738,70 @@ body {
   flex-shrink: 0;
   padding-top: 8px;
 }
+/* 디자이너 패널: chat-window가 panel-body 채우도록 */
+#designerPanel .panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#designerPanel .chat-window {
+  flex: 1;
+  min-height: 120px;
+  height: auto;
+  margin-bottom: 0;
+  font-size: 14px;
+}
+/* 디자이너 패널 헤더 레이아웃 */
+#designerPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.designer-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.designer-emoji {
+  font-size: 20px;
+  line-height: 1;
+}
+.designer-header-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.designer-ctrl-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255,150,200,0.4);
+  background: rgba(255,255,255,0.15);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.designer-ctrl-btn:hover {
+  background: rgba(255,150,200,0.25);
+}
+
+#voiceMicBtn {
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  padding: 6px 14px !important;
+  border-radius: 20px !important;
+  min-width: 90px;
+  letter-spacing: 0.02em;
+}
+
 .chat-msg {
   max-width: 82%; padding: 8px 12px;
-  border-radius: 12px; font-size: 12px; line-height: 1.55;
+  border-radius: 12px; font-size: 14px; line-height: 1.55;
 }
 .chat-msg.assistant {
   background: rgba(0,0,0,0.06);

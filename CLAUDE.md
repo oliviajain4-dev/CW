@@ -5,6 +5,50 @@
 
 ---
 
+## 🚨 TTS 절대규칙 — 브랜치 병합 후에도 절대 수정 금지
+
+> **이 섹션은 프로젝트 전체에서 가장 높은 우선순위를 가집니다.**
+> 어떤 브랜치 병합, 리팩토링, 코드 정리 작업을 하더라도 아래 내용은 변경하지 마세요.
+
+### 수정 금지 파일 및 함수
+
+| 파일 | 함수/변수 | 이유 |
+|---|---|---|
+| `chatbot/tts.py` | `_EN_KO` 테이블, `clean_for_tts()` | 서버 TTS 정제 핵심 로직 |
+| `static/js/voice.js` | `_EN_KO_JS` 테이블, `cleanText()` | 브라우저 TTS 정제 핵심 로직 |
+| `voice/router.py` | `_VOICE_SYSTEM` 프롬프트 | AI 음성 응답 한국어 강제 |
+| `chatbot/llm_client.py` | 각 함수의 TTS 절대규칙 섹션 | AI 디자이너 코멘트 한국어 강제 |
+
+### TTS 3대 원칙
+
+1. **순수 한국어만 읽힌다** — 알파벳은 한 글자도 음성으로 나와서는 안 됨
+2. **이모지·기호는 묵음** — 이모지, 대시(-/—), 별표(*), 밑줄(_), 괄호 등은 제거
+3. **두 테이블은 항상 동일** — `tts.py`의 `_EN_KO`와 `voice.js`의 `_EN_KO_JS`는 동일한 내용을 유지
+
+### TTS 경로 구조 (참고)
+
+```
+[자동 읽기] fillDesignerPanel(comment)
+  → VoiceEngine.autoSpeak(comment)
+  → voice.js cleanText()          ← 브라우저 Web Speech API
+  → SpeechSynthesisUtterance
+
+[마이크 대화] 마이크 ON → Web Speech API STT
+  → WebSocket /voice/ws
+  → voice/router.py process_user_text()
+  → chatbot/tts.py clean_for_tts() ← Google Cloud TTS
+  → synthesize_speech()
+```
+
+### 영어→한국어 변환 테이블 추가 방법
+
+새로운 영어 단어가 TTS에서 이상하게 읽힌다면:
+1. `chatbot/tts.py`의 `_EN_KO` 테이블에 추가
+2. **동시에** `static/js/voice.js`의 `_EN_KO_JS` 테이블에도 동일하게 추가
+3. 두 파일을 한 번에 수정하지 않으면 어느 한쪽 경로에서 영어가 그대로 읽힘
+
+---
+
 ## 폴더 구조 규칙
 
 ### 핵심 원칙
@@ -17,7 +61,7 @@
 ```
 CW/                          ← 메인 .py 파일만 여기에
 │
-├── app.py                   ← Flask 웹 서버 (메인)
+├── app.py                   ← FastAPI 웹 서버 (메인)
 ├── db.py                    ← DB 연결 모듈 (메인)
 ├── model.py                 ← 이미지 AI 분석 (메인)
 ├── make_flowchart.py        ← 흐름도 생성 메인 스크립트
@@ -35,7 +79,7 @@ CW/                          ← 메인 .py 파일만 여기에
 │   ├── flowchart_2D.png
 │   └── flowchart_3D.png
 │
-├── templates/               ← Flask HTML 템플릿
+├── templates/               ← FastAPI HTML 템플릿
 ├── static/                  ← CSS, JS, 업로드 이미지
 ├── docker/                  ← Docker 관련 파일 (init.sql)
 └── .devcontainer/           ← VS Code Dev Container 설정
@@ -62,7 +106,7 @@ CW/                          ← 메인 .py 파일만 여기에
 
 | 파일 | 설명 |
 |---|---|
-| `app.py` | Flask 메인 서버 |
+| `app.py` | FastAPI 메인 서버 |
 | `db.py` | DB 연결 모듈 |
 | `model.py` | 이미지 분석 모듈 |
 | `make_*.py` | 각 기능의 메인 실행 스크립트 |
@@ -135,7 +179,7 @@ Claude에게 새 기능 구현을 요청하면 Claude가 자동으로:
 
 | 기능 | 패키지 |
 |---|---|
-| 웹 서버 | `flask` |
+| 웹 서버 | `fastapi`, `uvicorn` |
 | AI 추천 | `anthropic` |
 | 날씨 API | `requests` |
 | 환경변수 | `python-dotenv` |

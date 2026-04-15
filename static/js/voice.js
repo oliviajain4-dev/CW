@@ -12,14 +12,200 @@
   let ttsEnabled   = true;
   let lastComment  = '';
 
-  /* ── 마크다운 → 읽기 텍스트 변환 ────────────── */
+  // ══════════════════════════════════════════════════════════════════════
+  // ⚠️  TTS 절대규칙 — 이 테이블과 cleanText()는 수정·삭제 금지 (CLAUDE.md 참고)
+  //     Python chatbot/tts.py의 _EN_KO 와 항상 동일한 내용을 유지해야 합니다.
+  // ══════════════════════════════════════════════════════════════════════
+  const _EN_KO_JS = [
+    // ── 상의 복합어
+    [/\bt[\s-]?shirt\b/gi,            '티셔츠'],
+    [/\bcrop[\s-]?top\b/gi,           '크롭탑'],
+    [/\btank[\s-]?top\b/gi,           '탱크탑'],
+    [/\btube[\s-]?top\b/gi,           '튜브탑'],
+    [/\bpolo[\s-]?shirt\b/gi,         '폴로셔츠'],
+    [/\bround[\s-]?neck\b/gi,         '라운드넥'],
+    [/\bv[\s-]?neck\b/gi,             '브이넥'],
+    [/\bturtle[\s-]?neck\b/gi,        '터틀넥'],
+    [/\bover[\s-]?fit\b/gi,           '오버핏'],
+    [/\bslim[\s-]?fit\b/gi,           '슬림핏'],
+    [/\bloose[\s-]?fit\b/gi,          '루즈핏'],
+    // ── 하의 복합어
+    [/\bwide[\s-]?pants?\b/gi,        '와이드팬츠'],
+    [/\bjogger[\s-]?pants?\b/gi,      '조거팬츠'],
+    [/\bcargo[\s-]?pants?\b/gi,       '카고팬츠'],
+    [/\blinen[\s-]?pants?\b/gi,       '린넨팬츠'],
+    [/\bflare[\s-]?skirt\b/gi,        '플레어스커트'],
+    [/\bmini[\s-]?skirt\b/gi,         '미니스커트'],
+    [/\bmidi[\s-]?skirt\b/gi,         '미디스커트'],
+    [/\bmaxi[\s-]?skirt\b/gi,         '맥시스커트'],
+    [/\bwrap[\s-]?skirt\b/gi,         '랩스커트'],
+    // ── 아우터 복합어
+    [/\bdenim[\s-]?jacket\b/gi,       '청자켓'],
+    [/\bset[\s-]?up\b/gi,             '세트업'],
+    [/\bone[\s-]?piece\b/gi,          '원피스'],
+    [/\bjump[\s-]?suit\b/gi,          '점프수트'],
+    [/\btrench[\s-]?coat\b/gi,        '트렌치코트'],
+    [/\bwind[\s-]?breaker\b/gi,       '바람막이'],
+    [/\bdown[\s-]?jacket\b/gi,        '다운재킷'],
+    // ── 가방 복합어
+    [/\btote[\s-]?bag\b/gi,           '토트백'],
+    [/\bback[\s-]?pack\b/gi,          '백팩'],
+    [/\bcross[\s-]?bag\b/gi,          '크로스백'],
+    [/\bshoulder[\s-]?bag\b/gi,       '숄더백'],
+    [/\bfanny[\s-]?pack\b/gi,         '힙색'],
+    // ── 상의 단어
+    [/\bblouse\b/gi,                  '블라우스'],
+    [/\bshirt\b/gi,                   '셔츠'],
+    [/\bknit(?:wear)?\b/gi,           '니트'],
+    [/\bhoodie\b/gi,                  '후드티'],
+    [/\bsweatshirt\b/gi,              '맨투맨'],
+    [/\bcardigan\b/gi,                '가디건'],
+    [/\bvest\b/gi,                    '조끼'],
+    [/\bsleeveless\b/gi,              '민소매'],
+    [/\bpolo\b/gi,                    '폴로'],
+    // ── 하의 단어
+    [/\bjeans?\b/gi,                  '청바지'],
+    [/\bdenim\b/gi,                   '데님'],
+    [/\bskirt\b/gi,                   '스커트'],
+    [/\bshorts?\b/gi,                 '반바지'],
+    [/\bleggings?\b/gi,               '레깅스'],
+    [/\bslacks?\b/gi,                 '슬랙스'],
+    [/\bpants?\b/gi,                  '팬츠'],
+    [/\btrousers?\b/gi,               '바지'],
+    // ── 원피스·아우터 단어
+    [/\bdress\b/gi,                   '원피스'],
+    [/\bjumpsuit\b/gi,                '점프수트'],
+    [/\bcoat\b/gi,                    '코트'],
+    [/\bblazer\b/gi,                  '블레이저'],
+    [/\bjacket\b/gi,                  '재킷'],
+    [/\btrench\b/gi,                  '트렌치코트'],
+    [/\bpadding\b/gi,                 '패딩'],
+    [/\bparka\b/gi,                   '파카'],
+    [/\bouter(?:wear)?\b/gi,          '아우터'],
+    // ── 신발
+    [/\bsneakers?\b/gi,               '스니커즈'],
+    [/\bboots?\b/gi,                  '부츠'],
+    [/\bloafers?\b/gi,                '로퍼'],
+    [/\bheels?\b/gi,                  '힐'],
+    [/\bsandals?\b/gi,                '샌들'],
+    [/\bmules?\b/gi,                  '뮬'],
+    [/\bflats?\b/gi,                  '플랫슈즈'],
+    [/\bslipper\b/gi,                 '슬리퍼'],
+    // ── 가방·악세서리 단어
+    [/\bbackpack\b/gi,                '백팩'],
+    [/\btote\b/gi,                    '토트백'],
+    [/\bclutch\b/gi,                  '클러치'],
+    [/\bbag\b/gi,                     '가방'],
+    [/\bbelt\b/gi,                    '벨트'],
+    [/\bscarf\b/gi,                   '스카프'],
+    [/\bbeanie\b/gi,                  '비니'],
+    [/\bcap\b/gi,                     '모자'],
+    [/\bhat\b/gi,                     '모자'],
+    [/\bnecklace\b/gi,                '목걸이'],
+    [/\bearrings?\b/gi,               '귀걸이'],
+    [/\bbracelet\b/gi,                '팔찌'],
+    [/\bwatch\b/gi,                   '시계'],
+    [/\bsunglasses?\b/gi,             '선글라스'],
+    [/\bgloves?\b/gi,                 '장갑'],
+    // ── 소재
+    [/\bcotton\b/gi,                  '면'],
+    [/\blinen\b/gi,                   '린넨'],
+    [/\bwool\b/gi,                    '울'],
+    [/\bleather\b/gi,                 '가죽'],
+    [/\bsuede\b/gi,                   '스웨이드'],
+    [/\bsatin\b/gi,                   '새틴'],
+    [/\bsilk\b/gi,                    '실크'],
+    [/\bchiffon\b/gi,                 '시폰'],
+    [/\bfleece\b/gi,                  '플리스'],
+    [/\bvelvet\b/gi,                  '벨벳'],
+    [/\bcorduroy\b/gi,                '코듀로이'],
+    [/\btweed\b/gi,                   '트위드'],
+    [/\bcashmere\b/gi,                '캐시미어'],
+    [/\bpolyester\b/gi,               '폴리에스터'],
+    [/\bspandex\b/gi,                 '스판'],
+    // ── 컬러
+    [/\bblack\b/gi,                   '블랙'],
+    [/\bwhite\b/gi,                   '화이트'],
+    [/\bbeige\b/gi,                   '베이지'],
+    [/\bgr[ae]y\b/gi,                 '그레이'],
+    [/\bnavy\b/gi,                    '네이비'],
+    [/\bbrown\b/gi,                   '브라운'],
+    [/\bivory\b/gi,                   '아이보리'],
+    [/\bcamel\b/gi,                   '카멜'],
+    [/\bmustard\b/gi,                 '머스타드'],
+    [/\bkhaki\b/gi,                   '카키'],
+    [/\bolive\b/gi,                   '올리브'],
+    [/\bburgundy\b/gi,                '버건디'],
+    [/\bwine\b/gi,                    '와인'],
+    [/\bcream\b/gi,                   '크림'],
+    [/\bpink\b/gi,                    '핑크'],
+    [/\bred\b/gi,                     '레드'],
+    [/\bblue\b/gi,                    '블루'],
+    [/\bgreen\b/gi,                   '그린'],
+    [/\byellow\b/gi,                  '옐로'],
+    [/\bpurple\b/gi,                  '퍼플'],
+    [/\borange\b/gi,                  '오렌지'],
+    [/\bgold\b/gi,                    '골드'],
+    [/\bsilver\b/gi,                  '실버'],
+    // ── 스타일·무드
+    [/\bcasual\b/gi,                  '캐주얼'],
+    [/\bformal\b/gi,                  '포멀'],
+    [/\bbasic\b/gi,                   '베이직'],
+    [/\bvintage\b/gi,                 '빈티지'],
+    [/\bminimal(?:ist)?\b/gi,         '미니멀'],
+    [/\bstreetwear\b/gi,              '스트릿'],
+    [/\bsporty\b/gi,                  '스포티'],
+    [/\belegant\b/gi,                 '엘레강스'],
+    [/\bclassy\b/gi,                  '클래식'],
+    [/\bchic\b/gi,                    '시크'],
+    [/\bcute\b/gi,                    '큐트'],
+    [/\bcool\b/gi,                    '쿨'],
+    [/\bstyling\b/gi,                 '스타일링'],
+    [/\bcoordination\b/gi,            '코디'],
+    [/\boutfit\b/gi,                  '코디'],
+    [/\blook\b/gi,                    '룩'],
+    [/\bTPO\b/g,                      '티피오'],
+    [/\bSNS\b/g,                      '에스엔에스'],
+    [/\bmixed\b/gi,                   '혼방'],
+    [/\btexture\b/gi,                 '소재'],
+    [/\bwarmth\b/gi,                  '보온'],
+    [/\blayering\b/gi,                '레이어링'],
+  ];
+
+  /* ── 마크다운 → TTS 읽기용 순수 한국어 변환 ─── */
   function cleanText(md) {
-    return (md || '')
-      .replace(/#{1,6} /g, '')
-      .replace(/\*\*|__|\*|_|`/g, '')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/\n{2,}/g, ' ')
-      .trim();
+    let t = md || '';
+    // 이모지 제거
+    t = t.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2702}-\u{27B0}\u{FE00}-\u{FE0F}]/gu, '');
+    // 마크다운 강조 기호 제거
+    t = t.replace(/\*{1,3}|_{1,3}|~{2}|`{1,3}/g, '');
+    // 헤더(#) 제거
+    t = t.replace(/^#{1,6}\s*/gm, '');
+    // 번호 목록 제거
+    t = t.replace(/^\s*\d+\.\s+/gm, '');
+    // 글머리 기호 제거
+    t = t.replace(/^\s*[-+*•◦▪▸➤]\s+/gm, '');
+    // 인용 블록 제거
+    t = t.replace(/^\s*>\s*/gm, '');
+    // 마크다운 링크 → 텍스트만
+    t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+    // 이중/삼중 대시 → 공백
+    t = t.replace(/-{2,}/g, ' ');
+    // 각종 대시/구분자 → 공백 (TTS "대시" 방지)
+    t = t.replace(/[-\u2013\u2014\u00B7\u30FB\uFF65·・•]/g, ' ');
+    // 괄호·특수기호 제거
+    t = t.replace(/[_|\\()\[\]{}<>@^%$&※°℃]/g, ' ');
+    // 영어 → 한국어 변환
+    for (const [pat, rep] of _EN_KO_JS) {
+      t = t.replace(pat, rep);
+    }
+    // 변환 후 남은 영문자 전부 제거 (순수 한국어만 TTS로)
+    t = t.replace(/[A-Za-z]+/g, '');
+    // 줄바꿈 → 공백
+    t = t.replace(/\n/g, ' ');
+    // 연속 공백 정리
+    t = t.replace(/\s{2,}/g, ' ');
+    return t.trim();
   }
 
   /* ── TTS ─────────────────────────────────────── */
@@ -195,16 +381,6 @@
 
     document.getElementById('voiceTextBtn')
       ?.addEventListener('click', toggleTextPanel);
-
-    document.getElementById('voiceReplayBtn')
-      ?.addEventListener('click', () => { if (lastComment) speak(lastComment); });
-
-    document.getElementById('voiceTtsToggle')
-      ?.addEventListener('click', function () {
-        ttsEnabled = !ttsEnabled;
-        this.textContent = ttsEnabled ? '🔊' : '🔇';
-        if (!ttsEnabled) stopSpeaking();
-      });
 
     // voice.css가 없는 페이지에서는 아무것도 안 함
   });

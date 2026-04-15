@@ -17,12 +17,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # requirements.txt 먼저 복사 → 소스 변경 시 pip 레이어 캐시 재사용
 COPY requirements.txt .
 
-# torch CPU 전용 먼저 설치 (PyPI 버전은 CUDA 의존이라 별도 인덱스 사용)
-RUN pip install torch torchvision \
-    --index-url https://download.pytorch.org/whl/cpu
-
-# 나머지 패키지 설치
-RUN pip install -r requirements.txt
+# 나머지 패키지 설치 (torch 제외 — requirements.txt에 포함됨)
+RUN grep -vE "^torch(audio|vision)?[>=!]" requirements.txt | pip install -r /dev/stdin --extra-index-url https://download.pytorch.org/whl/cpu
 
 # ── 앱 소스 복사 ───────────────────────────────────
 COPY . .
@@ -34,4 +30,4 @@ RUN mkdir -p static/uploads
 EXPOSE 5000
 
 # ── 실행 명령 ─────────────────────────────────────
-CMD ["python", "app.py"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]

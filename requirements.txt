@@ -22,6 +22,9 @@ scipy
 opencv-python
 ftfy
 
+# ── 객체 탐지 (YOLO) ─────────────────────────────
+ultralytics
+
 # ── 이미지 클라우드 저장 ───────────────────────────
 cloudinary==1.44.1
 
@@ -48,6 +51,7 @@ openai-whisper
 
 # ── 데이터 처리 ───────────────────────────────────
 pandas
+polars
 pydantic
 PyYAML
 huggingface_hub
