@@ -178,6 +178,14 @@ layering_needed=True
             }
     except Exception:
         pass
+    # JSON 파싱 실패 시 regex로 comment 필드만 추출
+    comment_match = re.search(r'"comment"\s*:\s*"((?:[^"\\]|\\.)*)"', raw, re.DOTALL)
+    if comment_match:
+        comment_text = (comment_match.group(1)
+                        .replace('\\"', '"')
+                        .replace('\\n', '\n')
+                        .replace('\\\\', '\\'))
+        return {"comment": comment_text, "bubbles": {}}
     return {"comment": raw, "bubbles": {}}
 
 
