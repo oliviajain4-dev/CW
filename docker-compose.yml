@@ -8,8 +8,8 @@ services:
     container_name: codi_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       ${POSTGRES_DB:-codi}
-      POSTGRES_USER:     ${POSTGRES_USER:-codi_user}
+      POSTGRES_DB: ${POSTGRES_DB:-codi}
+      POSTGRES_USER: ${POSTGRES_USER:-codi_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-codi_pass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -17,7 +17,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codi_user} -d ${POSTGRES_DB:-codi}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codi_user} -d ${POSTGRES_DB:-codi}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,14 +30,16 @@ services:
     ports:
       - "5000:5000"
     environment:
-      DATABASE_URL:        ${DATABASE_URL}
-      KMA_API_KEY:         ${KMA_API_KEY}
-      CLAUDE_API_KEY:      ${CLAUDE_API_KEY}
-      FLASK_SECRET_KEY:    ${FLASK_SECRET_KEY:-change-me}
+      DATABASE_URL: ${DATABASE_URL}
+      KMA_API_KEY: ${KMA_API_KEY}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY}
+      GOOGLE_TTS_API_KEY: ${GOOGLE_TTS_API_KEY}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-change-me}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session_docker}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
-      CLOUDINARY_API_KEY:    ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-      GOOGLE_CLIENT_ID:    ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     volumes:
       - .:/app
@@ -52,5 +54,5 @@ services:
 volumes:
   postgres_data:
   uploaded_images:
-  huggingface_cache:    # FashionSigLIP ~600MB
+  huggingface_cache: # FashionSigLIP ~600MB
   whisper_cache:

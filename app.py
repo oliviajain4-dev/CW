@@ -63,6 +63,7 @@ app = FastAPI(title="내 옷장의 코디")
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.getenv("FLASK_SECRET_KEY", "change-me-please"),
+    session_cookie=os.getenv("SESSION_COOKIE_NAME", "session_local"),
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static_files")
@@ -589,7 +590,15 @@ def logout(request: Request):
 # 메인 라우트
 # ══════════════════════════════════════════════════════════════════
 
-@app.get("/", name="dashboard")
+@app.get("/", include_in_schema=False)
+def root(request: Request):
+    user = _get_user(request)
+    if user.is_authenticated:
+        return RedirectResponse("/dashboard", status_code=302)
+    return RedirectResponse("/login", status_code=302)
+
+
+@app.get("/dashboard", name="dashboard")
 def dashboard(request: Request):
     user = _require_user(request)
     profile = load_profile(user.id)

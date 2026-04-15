@@ -177,6 +177,8 @@ async def voice_ws(websocket: WebSocket):
     session = {
         "user_name":         "",
         "sensitivity_label": "보통",
+        "partial_text":      "",   # 스트리밍 중 실시간 누적 텍스트
+        "interrupted_ctx":   "",   # barge-in 시 저장된 중단 내용
     }
 
     # ── 유틸 ───────────────────────────────────────────────────────────
@@ -199,6 +201,10 @@ async def voice_ws(websocket: WebSocket):
     async def _cancel_current() -> None:
         nonlocal current_task, interrupted
         interrupted = True
+        # 중단 시 스트리밍 중이던 내용 저장 (barge-in 이후 자연스러운 대화 재개용)
+        if session["partial_text"]:
+            session["interrupted_ctx"] = session["partial_text"]
+            session["partial_text"] = ""
         await _cancel_task(current_task)
         current_task = None
 
@@ -212,7 +218,7 @@ async def voice_ws(websocket: WebSocket):
             pass
 
     # ── 섹션 기반 대화 진행 ────────────────────────────────────────────
-    async def process_section(section: str, user_input: str = "", forced: bool = False) -> None:
+    async def process_section(section: str, user_input: str = "", forced: bool = False, interrupted_ctx: str = "") -> None:
         nonlocal interrupted
 
         user_name         = session["user_name"]
@@ -251,10 +257,20 @@ async def voice_ws(websocket: WebSocket):
             weather_label = context.get("weather_label", "")
 
             if user_input and not forced:
-                task_prompt = (
-                    f"사용자가 '{user_input}'라고 했어. 이 말에 먼저 자연스럽게 답하고, "
-                    f"바로 이어서 {section_prompts[section]}"
-                )
+                # barge-in으로 중단된 내용이 있으면 메시지 이력에 추가 (Claude 컨텍스트용)
+                if interrupted_ctx:
+                    messages.append({"role": "assistant", "content": interrupted_ctx})
+                    task_prompt = (
+                        f"사용자가 '{user_input}'라고 말했어. "
+                        "이 질문에 먼저 자연스럽게 답해줘. "
+                        "답변이 끝나면 아까 하던 말을 자연스럽게 이어서 마무리해줘. "
+                        "이미 한 말은 반복하지 말고 이어서 계속해."
+                    )
+                else:
+                    task_prompt = (
+                        f"사용자가 '{user_input}'라고 했어. 이 말에 먼저 자연스럽게 답하고, "
+                        f"바로 이어서 {section_prompts[section]}"
+                    )
                 messages.append({"role": "user", "content": user_input})
             else:
                 task_prompt = section_prompts[section]
@@ -268,11 +284,13 @@ async def voice_ws(websocket: WebSocket):
             full_text        = ""
             speaking_started = False
 
+            session["partial_text"] = ""  # 스트리밍 시작 전 초기화
             async for chunk in stream_chatbot_response(system, call_messages, max_tokens=_MAX_TOKENS):
                 if interrupted:
                     break
                 text_buf  += chunk
                 full_text += chunk
+                session["partial_text"] = full_text  # 실시간 업데이트 (barge-in 시 저장용)
 
                 while True:
                     m = _SENTENCE_END.search(text_buf)
@@ -315,6 +333,7 @@ async def voice_ws(websocket: WebSocket):
             if full_text:
                 await _send({"type": "response_text", "text": full_text})
                 messages.append({"role": "assistant", "content": full_text})
+            session["partial_text"] = ""  # 스트리밍 완료 후 초기화
 
             await _send({"type": "done"})
 
@@ -330,6 +349,7 @@ async def voice_ws(websocket: WebSocket):
         except asyncio.CancelledError:
             raise
         except Exception as e:
+            session["partial_text"] = ""
             await _send({"type": "error", "message": f"오류: {e}. {_FALLBACK}"})
             await _set_state("listening")
 
@@ -337,8 +357,11 @@ async def voice_ws(websocket: WebSocket):
     async def process_user_text(user_text: str) -> None:
         nonlocal interrupted
         interrupted = False
+        # barge-in으로 저장된 중단 내용 꺼내기 (한 번 쓰고 지움)
+        interrupted_ctx = session.get("interrupted_ctx", "")
+        session["interrupted_ctx"] = ""
         current = pending_sections[0] if pending_sections else "FOLLOWUP"
-        await process_section(current, user_input=user_text, forced=False)
+        await process_section(current, user_input=user_text, forced=False, interrupted_ctx=interrupted_ctx)
 
     # ── 메시지 루프 ────────────────────────────────────────────────────
     try:
@@ -370,13 +393,13 @@ async def voice_ws(websocket: WebSocket):
                 text = msg.get("text", "").strip()
                 if not text:
                     continue
+                # _cancel_current: partial_text → interrupted_ctx 자동 저장
                 await _cancel_current()
-                current_task = asyncio.create_task(
-                    process_section("FOLLOWUP", user_input=text)
-                )
+                current_task = asyncio.create_task(process_user_text(text))
 
             # 3. barge-in 신호
             elif msg_type == "barge_in":
+                # _cancel_current 안에서 partial_text → interrupted_ctx 저장
                 await _cancel_current()
                 await _set_state("listening")
 
@@ -388,6 +411,8 @@ async def voice_ws(websocket: WebSocket):
                 pending_sections.clear()
                 session["user_name"]         = ""
                 session["sensitivity_label"] = "보통"
+                session["interrupted_ctx"]   = ""
+                session["partial_text"]      = ""
                 state = "idle"
 
     except WebSocketDisconnect:
