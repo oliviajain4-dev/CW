@@ -642,7 +642,15 @@ async def profile_post(request: Request):
         with open(local_path, "wb") as f:
             f.write(contents)
         avatar_url = upload_image(local_path, user_id=uid, subfolder="profile")
-        _save_avatar(uid, avatar_url)
+        try:
+            _save_avatar(uid, avatar_url)
+        except Exception as e:
+            try:
+                delete_image(avatar_url)
+            except Exception as cleanup_error:
+                print(f"[Cloudinary cleanup 실패] {cleanup_error}")
+            flash(request, f"프로필 사진 저장 중 오류가 발생했습니다. 다시 시도해주세요.", "error")
+            return RedirectResponse("/profile", status_code=302)
 
     return RedirectResponse("/", status_code=302)
 
@@ -733,20 +741,30 @@ async def wardrobe_add(request: Request):
             )
 
             # Cloudinary 성공 후에만 DB에 기록 (트랜잭션 보장)
-            with get_db() as conn:
-                if is_postgres():
-                    execute(conn, """
-                        INSERT INTO wardrobe_items
-                            (user_id, image_path, category, item_type, warmth, texture, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    """, (user.id, save_path, category, item_name, item_warmth, item_texture))
-                else:
-                    execute(conn, """
-                        INSERT INTO wardrobe_items
-                            (user_id, image_path, category, item_type, warmth, texture, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (user.id, save_path, category, item_name, item_warmth, item_texture,
-                          datetime.now().isoformat()))
+            try:
+                with get_db() as conn:
+                    if is_postgres():
+                        execute(conn, """
+                            INSERT INTO wardrobe_items
+                                (user_id, image_path, category, item_type, warmth, texture, created_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                        """, (user.id, save_path, category, item_name, item_warmth, item_texture))
+                    else:
+                        execute(conn, """
+                            INSERT INTO wardrobe_items
+                                (user_id, image_path, category, item_type, warmth, texture, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (user.id, save_path, category, item_name, item_warmth, item_texture,
+                              datetime.now().isoformat()))
+            except Exception as e:
+                try:
+                    delete_image(save_path)
+                except Exception as cleanup_error:
+                    print(f"[Cloudinary cleanup 실패] {cleanup_error}")
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                errors.append(f"{orig_filename}: DB 저장 실패 — {e}")
+                continue
 
         except RuntimeError as e:
             # Cloudinary 업로드 실패 → DB 저장 안 함
