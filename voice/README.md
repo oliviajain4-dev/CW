@@ -7,29 +7,27 @@
 ## 1. 왜 만들었나? (배경)
 
 기존 서비스는 **텍스트 채팅**만 가능했습니다.
-사용자가 타이핑으로 "오늘 뭐 입을까?"를 물으면 Claude AI가 텍스트로 답했죠.
+사용자가 타이핑으로 "오늘 뭐 입을까?"를 물으면 AI가 텍스트로 답했죠.
 
 우리가 목표로 한 건 **음성으로 자연스럽게 대화**하는 것입니다.
 - 말로 물어보면 → AI가 말로 대답
-- AI가 말하는 중에 사용자가 끊어도 → 즉시 반응
+- AI가 말하는 중에 사용자가 끊어도 → 즉시 반응 (barge-in)
 - 대화가 끝나면 → 자동으로 다시 듣기 시작 (티카타카)
 
-이를 위해 세 가지 기술을 파이프라인으로 연결했습니다:
-
+**현재 구조: Gemini Live 단일 API**
 ```
-사용자 목소리 → [STT: Whisper] → 텍스트 → [AI: Claude] → 텍스트 → [TTS: Google] → AI 목소리
+사용자 목소리(PCM) → [Gemini Live] → AI 목소리(PCM)
+                     STT + LLM + TTS 통합
 ```
 
 ---
 
-## 2. 기술 스택과 선택 이유
+## 2. 기술 스택
 
 | 역할 | 기술 | 이유 |
 |------|------|------|
-| STT (음성→텍스트) | Whisper (OpenAI, 로컬 실행) | 무료, 한국어 우수, 인터넷 없어도 동작 |
-| AI 추천 | Claude API (Anthropic) | 기존에 쓰던 것과 동일, 옷장+날씨 컨텍스트 이해 |
-| TTS (텍스트→음성) | Google Cloud TTS | 한국어 WaveNet 음성 품질 우수, 처음에 CLOVA 고려했으나 유료라 변경 |
-| 실시간 통신 | WebSocket | HTTP와 달리 양방향 실시간 통신 가능 (인터럽트 신호 전송에 필수) |
+| STT + LLM + TTS 통합 | Google Gemini Live API | 단일 API로 STT·LLM·TTS를 모두 처리, 초저지연 |
+| 실시간 통신 | WebSocket | 양방향 실시간 통신 필수 |
 | 백엔드 | FastAPI | asyncio 기반 비동기 → 스트리밍 처리에 최적 |
 
 ---
@@ -38,174 +36,123 @@
 
 ```
 voice/
-├── stt_service.py      Whisper 모델 로드 + 음성→텍스트 변환
-├── tts_service.py      Google Cloud TTS → 텍스트→MP3 bytes
-├── pipeline.py         Claude 스트리밍 + 문장 단위 TTS 연결
+├── pipeline.py         GeminiLiveSession 클래스 — Gemini Live 세션 관리
 ├── router.py           FastAPI WebSocket/HTTP 엔드포인트
 └── static/
-    └── index.html      브라우저 음성 채팅 UI (전체 JS 로직 포함)
+    └── index.html      브라우저 음성 채팅 UI (PCM 오디오 처리 포함)
 ```
 
 ---
 
 ## 4. 각 파일이 하는 일
 
-### stt_service.py — 음성 인식
-```
-브라우저가 보낸 webm/opus 오디오 bytes
-    → 임시 파일로 저장
-    → Whisper small 모델로 한국어 인식
-    → "오늘 뭐 입어?" 같은 텍스트 반환
-```
-- **지연 로딩**: 처음 호출할 때만 모델 다운로드 (약 460MB), 이후엔 메모리에서 재사용
+### pipeline.py — Gemini Live 세션 래퍼
 
-### tts_service.py — 음성 합성
-```
-"오늘 청바지에 니트 어때?" 텍스트
-    → Google Cloud TTS API 호출 (HTTP POST)
-    → MP3 bytes 반환
-```
-- `GOOGLE_TTS_API_KEY` 환경변수 필요 (.env에 등록)
+`GeminiLiveSession` 클래스 하나로 전체 파이프라인을 관리합니다.
 
-### pipeline.py — 핵심 파이프라인
-가장 중요한 파일. Claude 스트리밍과 TTS를 연결합니다.
-
-```python
-# Claude가 "청바지에 니트 코디 어때. 오늘 날씨엔 딱이야." 를 생성할 때
-# 전체를 기다리지 않고 첫 문장 "청바지에 니트 코디 어때." 가 완성되는 순간
-# 즉시 TTS에 보냄 → 사용자가 더 빠르게 답변을 들음
+```
+start_session(context)   → Gemini Live WebSocket 연결, 옷장·날씨 컨텍스트 주입
+send_audio(pcm_bytes)    → 16kHz 16-bit PCM 오디오 전송
+receive_audio()          → 응답 PCM 오디오 스트리밍 수신 (AsyncGenerator)
+interrupt()              → barge-in 시 수신 루프 즉시 종료
+end_session()            → 연결 종료 및 리소스 정리
 ```
 
-**TTS 전 텍스트 정제 (_clean_for_tts):**
-Claude가 가끔 `**굵게**`, `_언더바_`, `🎉이모지` 같은 걸 섞어 쓰면
-TTS가 "별표별표 굵게 별표별표", "언더바" 같이 읽어버립니다.
-이를 방지하기 위해 TTS에 보내기 전에 자동으로 제거합니다:
-- `**`, `*`, `_`, `#`, `` ` `` → 제거
-- 이모지 → 제거
-- 리스트 마커(`- `, `1. `) → 제거
+### router.py — WebSocket 엔드포인트
 
-### router.py — API 엔드포인트
 ```
 GET  /voice      → 음성 채팅 UI 페이지 서빙
-POST /voice/stt  → 오디오 파일 업로드 → 텍스트 반환 (테스트용)
-WS   /voice/ws   → 실시간 음성 파이프라인 (메인)
+POST /voice/stt  → 410 반환 (Gemini Live로 교체됨)
+WS   /voice/ws   → Gemini Live 실시간 대화 (메인)
 ```
 
 ---
 
 ## 5. WebSocket 통신 프로토콜
 
-WebSocket은 브라우저와 서버가 **실시간으로 양방향** 메시지를 주고받는 기술입니다.
-HTTP와 다르게 연결을 유지한 채로 언제든 데이터를 주고받을 수 있습니다.
-
 ### 브라우저 → 서버
 
-| 메시지 타입 | 내용 | 시점 |
-|-------------|------|------|
-| `audio` | base64 인코딩된 webm 오디오 | 사용자가 말을 마쳤을 때 |
-| `interrupt` | (데이터 없음) | 사용자가 AI 말하는 중에 끼어들 때 |
+| 메시지 타입 | 내용 |
+|-------------|------|
+| `start_conversation` | `{ context: { wardrobe: [...], weather_label: "..." } }` |
+| `audio_chunk` | `{ data: "<base64 16kHz PCM>" }` — 발화 완료 후 전송 |
+| `end_conversation` | 대화 종료 |
 
 ### 서버 → 브라우저
 
-| 메시지 타입 | 내용 | 시점 |
-|-------------|------|------|
-| `transcript` | 인식된 텍스트 | Whisper 처리 완료 |
-| `audio_chunk` | base64 MP3 데이터 | 문장 하나의 TTS 완료마다 |
-| `done` | (없음) | Claude 응답 전체 완료 |
-| `interrupted` | (없음) | 인터럽트 처리 완료 |
-| `error` | 오류 메시지 | 오류 발생 시 |
+| 메시지 타입 | 내용 |
+|-------------|------|
+| `state` | `"listening"` 또는 `"speaking"` |
+| `audio_chunk` | `{ data: "<base64 24kHz PCM>" }` — Gemini 응답 오디오 |
+| `done` | 응답 완료 |
+| `error` | `{ message: "..." }` |
 
 ---
 
-## 6. 티카타카 동작 흐름 (핵심)
+## 6. 티카타카 동작 흐름
 
 ```
 [대화 시작 버튼 클릭]
+        ↓ (옷장·날씨 컨텍스트 API 로드 → start_conversation 전송)
+   서버: GeminiLiveSession 시작 → state: listening
         ↓
-   자동 녹음 시작 ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┐
-        ↓                                   │
-  (침묵 감지 VAD)                           │
-  말하는 동안 대기                           │
-  1.3초 침묵 → 자동 전송                    │
-        ↓                                   │
-  Whisper STT → 텍스트                      │
-        ↓                                   │
-  Claude API (스트리밍)                      │
-        ↓                                   │
-  문장 완성마다 → TTS → MP3 → 브라우저 재생  │
-        ↓                                   │
-  오디오 큐 소진 (AI 말 끝)                  │
-        ↓                                   │
-  0.4초 후 자동 녹음 시작 ─ ─ ─ ─ ─ ─ ─ ─ ┘
-        
-        ※ AI 말하는 중 사용자가 말하면?
-           인터럽트 VAD 감지 → 재생 즉시 중단 → 서버에 interrupt 신호 전송
-           → 0.1초 후 자동 녹음 시작 (사용자 발화 수신)
+   브라우저: 마이크 VAD 시작 ← ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┐
+        ↓                                                  │
+   말하는 동안 PCM 누적                                     │
+   500ms 침묵 → audio_chunk 전송                           │
+        ↓                                                  │
+   서버: Gemini Live 전송 → 응답 스트리밍 시작              │
+   state: speaking                                         │
+        ↓                                                  │
+   브라우저: PCM 청크 순서대로 Web Audio API 재생            │
+        ↓                                                  │
+   서버: turn_complete → state: listening ─ ─ ─ ─ ─ ─ ─ ─ ┘
 
-[대화 종료 버튼 클릭] → 루프 중단
+   ※ AI 말하는 중 사용자가 말하면? (barge-in)
+      barge VAD 감지(250ms) → 재생 즉시 중단
+      → bargePcmBuffer(사용자 음성) → audio_chunk 전송
+      → 서버: interrupt() + 새 Gemini 응답 시작
 ```
 
 ---
 
-## 7. VAD (Voice Activity Detection) — 두 가지 역할
+## 7. 오디오 포맷
 
-VAD는 마이크 볼륨을 실시간으로 분석해서 "말하고 있는지" 판단하는 기능입니다.
-이 프로젝트에서는 VAD를 **두 가지 목적**으로 사용합니다:
-
-### VAD 1: 인터럽트 감지 (재생 중)
-- AI 음성이 재생되는 동안 마이크를 계속 모니터링
-- 볼륨 RMS > 0.045 이면 "사용자가 말하기 시작했다"로 판단
-- → 재생 즉시 중단 + 서버에 interrupt 신호 + 자동 녹음 시작
-
-### VAD 2: 침묵 감지 (녹음 중)
-- 사용자가 말하다가 멈추면 자동으로 전송
-- 볼륨 RMS < 0.018 이 1.3초 지속되면 "말이 끝났다"로 판단
-- 최소 발화 길이 400ms 이하면 잡음으로 무시
-- UI에 보라색 진행 바로 카운트다운 표시
+| 방향 | 샘플레이트 | 비트 | 채널 | MIME |
+|------|-----------|------|------|------|
+| 브라우저 → 서버 | 16000 Hz | 16-bit 부호 있는 정수 | mono | `audio/pcm;rate=16000` |
+| 서버 → 브라우저 | 24000 Hz | 16-bit 부호 있는 정수 | mono | raw PCM |
 
 ---
 
 ## 8. 실행 방법
 
 ```bash
-# 로컬 실행 (포트 5000, 음성 포함)
+# 로컬 실행
 python app.py
 
 # 접속
 http://localhost:5000/voice    ← 음성 채팅 전용 UI
-http://localhost:5000          ← 기존 웹 UI (음성 기능 포함)
+http://localhost:5000          ← 기존 웹 UI
 
 # Docker
 docker-compose up --build
 ```
 
 ### .env에 필요한 키
+
 ```
-GOOGLE_TTS_API_KEY=...    # Google Cloud TTS
-CLAUDE_API_KEY=...        # Claude AI
+GEMINI_API_KEY=...    # Google Gemini Live API
+CLAUDE_API_KEY=...    # Claude AI (텍스트 챗봇용, 음성과는 별개)
 ```
 
 ---
 
-## 9. 처음에 Flask였다가 FastAPI로 바꾼 이유
-
-원래 이 프로젝트는 Flask 기반이었습니다.
-음성 기능을 추가하면서 **두 서버**(Flask 5000, FastAPI 8000)를 돌렸는데,
-팀 운영과 Docker 관리가 복잡해졌습니다.
-
-Flask는 기본적으로 **동기(sync)** 방식이라 WebSocket + 스트리밍을 붙이기가 어렵습니다.
-FastAPI는 `async/await`를 네이티브로 지원해서 Claude 스트리밍 → TTS 동시 처리에 최적입니다.
-
-그래서 Flask를 FastAPI로 완전히 교체하고, 음성 라우터를 같은 서버에 통합했습니다.
-**이제 포트 5000 하나로 기존 기능 + 음성 기능이 모두 동작합니다.**
-
----
-
-## 10. 알려진 제약
+## 9. 알려진 제약
 
 | 항목 | 내용 |
 |------|------|
-| Whisper 첫 실행 | 모델 다운로드 약 460MB, 최초 1회만 발생 (Docker 볼륨으로 캐시됨) |
-| HTTPS 필요 | 실제 배포 시 브라우저 마이크 권한은 HTTPS에서만 허용됨 (localhost는 예외) |
-| 인터럽트 민감도 | 주변 소음이 많은 환경에서 오작동 가능 → `INTERRUPT_RMS` 값 조정 |
-| TTS 비용 | Google WaveNet 음성: 100만자 초과 시 유료 (Standard 음성은 더 저렴) |
+| HTTPS 필요 | 실제 배포 시 브라우저 마이크 권한은 HTTPS에서만 허용 (localhost는 예외) |
+| ScriptProcessorNode | 마이크 PCM 캡처에 deprecated API 사용 중 — 향후 AudioWorklet으로 교체 권장 |
+| Gemini Live 음성 | 현재 `Kore` 음성 고정 — pipeline.py의 `_VOICE` 변수로 변경 가능 |
+| barge-in 민감도 | 주변 소음 환경에서 오작동 가능 → index.html의 `BARGE_DB_THRESH` 조정 |

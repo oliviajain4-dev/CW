@@ -32,7 +32,7 @@ import os
 import time
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -69,13 +69,25 @@ app.mount("/static", StaticFiles(directory="static"), name="static_files")
 templates = Jinja2Templates(directory="templates")
 
 
-def img_url_filter(image_path: str) -> str:
-    """Cloudinary URL이면 그대로, 로컬 경로면 /static/... 형태로 변환"""
+def img_url_filter(image_path) -> str:
+    """Cloudinary public_id → CDN URL, 로컬 경로 → /static/..."""
+    if not image_path:
+        return ""
+    image_path = str(image_path).strip()
     if not image_path:
         return ""
     if image_path.startswith("http"):
         return image_path
-    clean = image_path.replace("\\", "/").replace("static/", "")
+    # static/ 으로 시작하면 로컬 파일
+    if image_path.startswith("static/") or image_path.startswith("/static/"):
+        clean = image_path.replace("\\", "/").lstrip("/").replace("static/", "")
+        return f"/static/{clean}"
+    # 그 외(users/... 등)는 Cloudinary public_id
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME")
+    if cloud_name:
+        return f"https://res.cloudinary.com/{cloud_name}/image/upload/{image_path}"
+    # Cloudinary 미설정이면 로컬 폴백
+    clean = image_path.replace("\\", "/")
     return f"/static/{clean}"
 
 
@@ -105,7 +117,10 @@ if _GOOGLE_ENABLED:
         client_id=os.getenv("GOOGLE_CLIENT_ID"),
         client_secret=os.getenv("GOOGLE_CLIENT_SECRET"),
         server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
-        client_kwargs={"scope": "openid email profile"},
+        client_kwargs={
+            "scope": "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+            "access_type": "online",
+        },
     )
 
 # ── 상수 ─────────────────────────────────────────────────────────
@@ -535,10 +550,30 @@ async def auth_google_callback(request: Request):
             row = fetchone(conn, "SELECT * FROM users WHERE id=%s", (str(user_id),))
 
     request.session["user_id"] = str(row["id"])
+    # 캘린더 접근용 access_token 세션 저장
+    try:
+        access_token: str | None = token["access_token"]  # type: ignore[index]
+    except Exception:
+        access_token = None
+    if access_token:
+        request.session["google_access_token"] = access_token
     if not row.get("gender"):
         flash(request, f"환영합니다, {name}님! 프로필을 완성해주세요.", "success")
         return RedirectResponse("/profile", status_code=302)
     return RedirectResponse("/", status_code=302)
+
+
+@app.get("/api/calendar", name="api_calendar")
+async def api_calendar(request: Request):
+    """오늘 구글 캘린더 일정 반환. 구글 로그인 필요."""
+    _require_user(request)
+    access_token = request.session.get("google_access_token")
+    if not access_token:
+        return JSONResponse({"events": [], "error": "구글 로그인 필요"}, status_code=200)
+    from chatbot.calendar_client import get_today_events, tpo_from_events
+    events = get_today_events(access_token)
+    auto_tpo = tpo_from_events(events)
+    return JSONResponse({"events": events, "auto_tpo": auto_tpo})
 
 
 @app.get("/logout", name="logout")
@@ -559,7 +594,7 @@ def dashboard(request: Request):
     with get_db() as conn:
         wardrobe_items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
             (user.id,)
         )
     return render(request, "dashboard.html", {
@@ -616,7 +651,7 @@ def wardrobe(request: Request):
     with get_db() as conn:
         items = fetchall(
             conn,
-            f"SELECT * FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            f"SELECT * FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY category, created_at DESC",
             (user.id,)
         )
     categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
@@ -833,7 +868,7 @@ async def api_recommend(request: Request, quick: bool = False):
             all_items = fetchall(
                 conn,
                 f"SELECT id, category, item_type, warmth, texture, image_path "
-                f"FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
+                f"FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
                 (user.id,)
             )
 
@@ -866,7 +901,7 @@ async def api_recommend(request: Request, quick: bool = False):
             img_path = item.get("image_path", "")
             if cat not in wardrobe_matches or not img_path:
                 continue
-            img_url = "/" + img_path.replace("\\", "/").lstrip("/")
+            img_url = img_url_filter(img_path)
             entry   = {"id": item["id"], "item_type": item["item_type"],
                        "warmth": item.get("warmth", 0), "image_url": img_url}
             warmth  = item.get("warmth", 0)
@@ -898,10 +933,21 @@ async def api_recommend(request: Request, quick: bool = False):
             for it in all_items
         ]
 
+        # 캘린더 일정 가져오기 (구글 로그인 시에만)
+        calendar_events: "list[dict]" = []
+        g_token = request.session.get("google_access_token")
+        if g_token:
+            from chatbot.calendar_client import get_today_events, tpo_from_events  # type: ignore[import]
+            _evs: "list[dict]" = await asyncio.to_thread(get_today_events, g_token)  # type: ignore[arg-type]
+            calendar_events = _evs
+            _detected: "str | None" = tpo_from_events(_evs)  # type: ignore[arg-type]
+            if _detected:
+                tpo = _detected
+
         trend_news = await asyncio.to_thread(get_fashion_news, style_pref)
         outfit_result = await asyncio.to_thread(
-            get_outfit_comment, weather, style_rec, layering, tpo,
-            profile or None, wardrobe_for_ai, trend_news
+            get_outfit_comment, weather, style_rec, layering, str(tpo),  # type: ignore[arg-type]
+            profile or None, wardrobe_for_ai, trend_news, calendar_events
         )
         comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
         bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
@@ -928,7 +974,7 @@ def api_wardrobe(request: Request):
         items = fetchall(
             conn,
             f"SELECT id, category, item_type, warmth, texture, image_path, created_at "
-            f"FROM wardrobe_items WHERE user_id={ph} ORDER BY category, created_at DESC",
+            f"FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY category, created_at DESC",
             (user.id,)
         )
     grouped: dict = {"상의": [], "하의": [], "원피스": [], "아우터": []}
@@ -940,7 +986,7 @@ def api_wardrobe(request: Request):
                 "item_type": item["item_type"],
                 "warmth":    item.get("warmth", 0),
                 "texture":   item.get("texture", ""),
-                "image_url": item.get("image_path", ""),
+                "image_url": img_url_filter(str(item.get("image_path") or "")),
             })
     return JSONResponse({
         "user_id":    user.id,
@@ -969,7 +1015,7 @@ async def api_shopping(request: Request):
             all_items = fetchall(
                 conn,
                 f"SELECT category, item_type, warmth, texture FROM wardrobe_items "
-                f"WHERE user_id={ph} ORDER BY created_at DESC",
+                f"WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
                 (user.id,)
             )
 
@@ -997,6 +1043,29 @@ async def api_shopping(request: Request):
         return JSONResponse({"cards": cards})
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ══════════════════════════════════════════════════════════════════
+# 이미지 프록시 (same-origin canvas 색상 추출용)
+# ══════════════════════════════════════════════════════════════════
+
+@app.get("/proxy/image", name="proxy_image")
+async def proxy_image(url: str):
+    """Cloudinary 이미지를 same-origin으로 프록시 → canvas getImageData 허용"""
+    import httpx
+    from fastapi.responses import Response as RawResponse
+    if not url.startswith("https://res.cloudinary.com/"):
+        return JSONResponse({"error": "허용되지 않는 URL"}, status_code=400)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(url)
+        return RawResponse(
+            content=r.content,
+            media_type=r.headers.get("content-type", "image/jpeg"),
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=502)
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -169,6 +169,41 @@ CLAUDE_API_KEY=...    # Anthropic Claude API (발급 완료)
 
 ---
 
+## 음성 기능 재설계 결정사항 (2026-04-14)
+
+> 자세한 내용은 `voice/REDESIGN.md` 참고
+
+### 핵심 변경
+- **Gemini Live API 완전 제거** (gemini-2.0-flash-exp deprecated로 작동 불가)
+- **STT**: Web Speech API (브라우저 내장, 무료, 한국어 완벽 지원)
+- **LLM**: Claude 단일화 — `claude-sonnet-4-6` (텍스트 챗봇과 동일 엔진)
+- **TTS**: Google TTS 유지 → `chatbot/tts.py` 공용 모듈로 이동
+- **마이크 버튼**: `templates/dashboard.html` 안에 있음 (ON=초록/OFF=빨강 토글)
+
+### 수정 대상 파일
+| 파일 | 변경 내용 |
+|---|---|
+| `voice/pipeline.py` | Gemini 제거, 대폭 축소 |
+| `voice/router.py` | WebSocket 프로토콜 변경 (텍스트 수신→Claude→텍스트+오디오 전송) |
+| `chatbot/llm_client.py` | 마크다운 금지 프롬프트 강화, voice에서도 import 가능하게 |
+| `chatbot/tts.py` | **신규** — clean_for_tts() + Google TTS 공용 모듈 |
+| `templates/dashboard.html` | 마이크 버튼 ON/OFF 토글, Web Speech API JS 추가 |
+| `requirements.txt` | google-generativeai 제거 |
+
+### Claude에게 작업 지시 시 필수 포함 문구
+```
+관련 파일 전부 스스로 확인하고, app.py만 건드리지 말고
+위 수정 대상 파일 전부 수정해줘. 뭘 어디서 바꿨는지 파일별로 정리해줘.
+```
+
+### API 키 현황 (voice 관련)
+- `GOOGLE_TTS_API_KEY` → `chatbot/tts.py`에서 사용
+- `CLAUDE_API_KEY` → `chatbot/llm_client.py`에서 사용 (기존과 동일)
+- `GEMINI_API_KEY` → 더 이상 사용 안 함 (코드에서 참조 제거됨)
+- `DEEPGRAM_API_KEY` → 한국어 미지원으로 사용 안 함 (키만 보관)
+
+---
+
 ## 실행 방법 (빠른 참조)
 
 ```powershell

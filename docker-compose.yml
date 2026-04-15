@@ -30,10 +30,10 @@ services:
     ports:
       - "5000:5000"
     environment:
-      DATABASE_URL:        postgresql://${POSTGRES_USER:-codi_user}:${POSTGRES_PASSWORD:-codi_pass}@db:5432/${POSTGRES_DB:-codi}
+      DATABASE_URL:        ${DATABASE_URL}
       KMA_API_KEY:         ${KMA_API_KEY}
       CLAUDE_API_KEY:      ${CLAUDE_API_KEY}
-      GOOGLE_TTS_API_KEY:  ${GOOGLE_TTS_API_KEY}
+      GEMINI_API_KEY:      ${GEMINI_API_KEY}
       FLASK_SECRET_KEY:    ${FLASK_SECRET_KEY:-change-me}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY:    ${CLOUDINARY_API_KEY}
@@ -56,4 +56,4 @@ volumes:
   postgres_data:
   uploaded_images:
   huggingface_cache:    # FashionSigLIP ~600MB
-  whisper_cache:        # Whisper small ~460MB
+  whisper_cache:
