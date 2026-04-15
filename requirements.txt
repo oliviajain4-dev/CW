@@ -27,6 +27,7 @@ cloudinary==1.44.1
 
 # ── 인증 (로그인) ─────────────────────────────────
 Flask-Login==0.6.3
+authlib==1.6.10
 
 # ── AI 추천 (Claude API) ──────────────────────────
 anthropic
@@ -53,4 +54,3 @@ huggingface_hub
 tqdm
 psutil
 rich
-authlib==1.6.10
