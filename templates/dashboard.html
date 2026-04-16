@@ -453,19 +453,8 @@
       VoiceEngine.setTextContent(commentHtml);
     }
 
-    // ── 코디 낭독 자동 시작 (마이크 OFF 상태에서만) ─────────────
-    // 새 코멘트 도착 시 outfit 추적 상태 초기화
+    // 새 코멘트 도착 시 outfit 추적 상태 초기화 — ON 버튼 누르면 처음부터 낭독
     if (window.resetOutfitState) window.resetOutfitState();
-
-    // 2초 후 WebSocket 경유 문장 단위 낭독 시작
-    // (AudioContext unlock은 패널 열기 클릭 제스처로 이미 수행됨)
-    if (!_voiceActive) {
-      setTimeout(() => {
-        if (!_voiceActive && window.startVoiceAutoMode) {
-          window.startVoiceAutoMode();
-        }
-      }, 2000);
-    }
   }
 
   // ── 쇼핑 패널 — 별도 로드 ───────────────────────────────────────
@@ -767,6 +756,20 @@
       }
     };
 
+    // ── 오디오 재생 완료 콜백 — outfit 이어읽기 타이밍 제어용 ────────
+    // playSources가 비고 nextPlay 시각이 지나면 callback 호출
+    window.whenAudioDone = function (callback) {
+      function _check() {
+        if (!playCtx) { callback(); return; }
+        if (playSources.length === 0 && playCtx.currentTime >= nextPlay - 0.05) {
+          callback();
+        } else {
+          setTimeout(_check, 150);
+        }
+      }
+      setTimeout(_check, 150);
+    };
+
     // ── 첫 사용자 제스처에서 AudioContext 언락 + 대기 오디오 재생 ──
     function _onFirstGesture() {
       window.ensurePlayCtx();
@@ -807,8 +810,13 @@
     let _currentAssistantDiv = null;  // 현재 쌓이고 있는 AI 말풍선 (sentence_text 점진적 표시)
 
     // 코디 낭독 추적 (tikki-takka 이어읽기용)
-    let _outfitStarted  = false;   // startVoiceAutoMode 호출 여부
-    let _outfitReadDone = false;   // outfit_done 수신 여부
+    let _outfitStarted    = false;  // ON 버튼으로 코디 낭독 시작 여부
+    let _outfitReadDone   = false;  // outfit_done 수신 여부
+    let _outfitResumeTimer = null;  // outfit_continue 후 resume_outfit 예약 타이머
+
+    function _cancelOutfitResume() {
+      if (_outfitResumeTimer) { clearTimeout(_outfitResumeTimer); _outfitResumeTimer = null; }
+    }
 
     // ── 오디오 함수는 위 IIFE에서 window에 노출됨 (enqueuePCM, stopAudio, ensurePlayCtx)
     const enqueuePCM    = window.enqueuePCM;
@@ -1108,10 +1116,44 @@
         }
         // done: _currentAssistantDiv 초기화 (response_text 없이 끝나는 경우 대비)
         if (msg.type === 'done') { _currentAssistantDiv = null; }
-        // outfit_done: 코디 낭독 완료 → 이후 ON 버튼은 listening 모드로만
+        // outfit_done: 코디 낭독 완전 완료 → 이후 ON 버튼은 listening 모드로만
         if (msg.type === 'outfit_done') {
           _outfitReadDone = true;
           _currentAssistantDiv = null;
+        }
+        // outfit_continue: 수정 응답 완료 — 오디오 끝나면 2초 후 resume_outfit 전송
+        if (msg.type === 'outfit_continue') {
+          _cancelOutfitResume();
+          // 시스템 안내 버블
+          const win = document.getElementById('designerChatWindow');
+          if (win) {
+            if (win.style.display === 'none') {
+              win.style.display = 'flex'; win.style.flexDirection = 'column';
+              win.style.gap = '6px'; win.style.overflowY = 'auto';
+              const hr = document.getElementById('designerDivider');
+              if (hr) hr.style.display = 'block';
+            }
+            const d = document.createElement('div');
+            d.className = 'chat-msg assistant';
+            d.style.cssText = 'opacity:0.55;font-style:italic;font-size:0.85em;';
+            d.textContent = '잠깐, 이어서 설명할게...';
+            win.appendChild(d);
+            win.scrollTop = win.scrollHeight;
+          }
+          // 오디오 재생 완료 확인 후 2초 정적 → resume_outfit
+          const _doResume = function () {
+            _outfitResumeTimer = setTimeout(function () {
+              _outfitResumeTimer = null;
+              if (ws && ws.readyState === WebSocket.OPEN && inVoice && !_outfitReadDone) {
+                ws.send(JSON.stringify({ type: 'resume_outfit' }));
+              }
+            }, 2000);
+          };
+          if (window.whenAudioDone) {
+            window.whenAudioDone(_doResume);
+          } else {
+            setTimeout(_doResume, 500);
+          }
         }
         // ping: 무시
       };
@@ -1134,6 +1176,7 @@
 
       // 말 시작 감지 → barge-in (TTS 재생 중이거나 오디오 큐에 남아있을 때)
       recognition.onspeechstart = () => {
+        _cancelOutfitResume();  // 사용자가 말하면 이어읽기 예약 취소
         if (serverState === 'speaking' || playSources.length > 0) {
           stopAudio();
           if (ws?.readyState === WebSocket.OPEN)
@@ -1235,21 +1278,6 @@
       if (reconnTimer) { clearTimeout(reconnTimer); reconnTimer = null; }
     }
 
-    // ── 수석 디자이너 코디 낭독 자동 시작 (WebSocket 경유, 문장 단위 TTS) ──
-    // fillDesignerPanel의 2초 타이머에서 호출됨
-    // read_full_outfit: true → 서버가 코디 코멘트를 sentence_text 단위로 낭독
-    function startVoiceAutoMode() {
-      if (inVoice) return;  // 이미 ON 상태면 건너뜀
-      _outfitStarted = true;
-      inVoice = true;
-      serverState = 'speaking';
-      updateUI('speaking');
-      setupRecognition();
-      startRecognition();
-      connectWS(false, true);  // read_full_outfit: true — 서버가 문장 단위 낭독
-    }
-    window.startVoiceAutoMode = startVoiceAutoMode;
-
     // 새 코디 코멘트 도착 시 outfit 추적 상태 초기화 (fillDesignerPanel에서 호출)
     window.resetOutfitState = function () {
       _outfitStarted  = false;
@@ -1306,6 +1334,7 @@
 
       } else {
         // ── 마이크 OFF ─────────────────────────────────────────
+        _cancelOutfitResume();
         _savedMessages = [];
         inVoice = false;
         serverState = 'idle';

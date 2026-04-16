@@ -19,12 +19,18 @@ WebSocket 프로토콜:
     { "type": "end_conversation" }
 
   서버 → 클라이언트:
-    { "type": "state",         "value": "listening|processing|speaking" }
-    { "type": "response_text", "text": "Claude 전체 응답 텍스트" }   ← 화면 표시용
-    { "type": "audio_chunk",   "data": "<base64 24kHz PCM>" }
+    { "type": "state",          "value": "listening|processing|speaking" }
+    { "type": "response_text",  "text": "Claude 전체 응답 텍스트" }   ← 화면 표시용
+    { "type": "sentence_text",  "text": "...", "is_outfit": bool, "idx": N, "total": N }
+    { "type": "audio_chunk",    "data": "<base64 24kHz PCM>" }
     { "type": "done" }
-    { "type": "error",         "message": "..." }
+    { "type": "outfit_done" }     ← 코디 낭독 완전 완료
+    { "type": "outfit_continue" } ← 수정 응답 후 2초 이어읽기 대기
+    { "type": "error",          "message": "..." }
     { "type": "ping" }
+
+  클라이언트 → 서버 (추가):
+    { "type": "resume_outfit" } ← 코디 이어읽기 수동 재개 (fallback)
 """
 import asyncio
 import base64
@@ -238,8 +244,10 @@ async def voice_ws(websocket: WebSocket):
         current_task = None
 
     # ── 코디 코멘트 전문 낭독 (sentence_text 단위 스트리밍) ──────────────
-    async def read_outfit_verbatim() -> None:
-        """outfit_comment를 문장 단위로 TTS 재생. barge-in으로 중단 가능."""
+    async def read_outfit_verbatim(resume: bool = False) -> None:
+        """outfit_comment를 문장 단위로 TTS 재생. barge-in으로 중단 가능.
+        resume=True: outfit_sent_count 위치부터 이어서 읽기 (tikki-takka 재개).
+        """
         nonlocal interrupted
         interrupted = False
 
@@ -248,18 +256,29 @@ async def voice_ws(websocket: WebSocket):
             await _set_state("listening")
             return
 
-        sentences = _split_outfit_sentences(outfit_comment)
-        session["outfit_sentences"]  = sentences
-        session["outfit_sent_count"] = 0
+        if not resume:
+            sentences = _split_outfit_sentences(outfit_comment)
+            session["outfit_sentences"]  = sentences
+            session["outfit_sent_count"] = 0
+        else:
+            sentences = session["outfit_sentences"]
+            if not sentences:
+                await _send({"type": "outfit_done"})
+                await _set_state("listening")
+                return
+
+        start_idx = session["outfit_sent_count"]
 
         try:
             await _set_state("speaking")
 
-            for i, sentence in enumerate(sentences):
+            for i in range(start_idx, len(sentences)):
                 if interrupted:
                     break
+                sentence = sentences[i]
                 cleaned = clean_for_tts(sentence)
                 if not cleaned:
+                    session["outfit_sent_count"] = i + 1
                     continue
                 try:
                     pcm = await synthesize_speech(cleaned)
@@ -343,18 +362,15 @@ async def voice_ws(websocket: WebSocket):
 
                 if remaining_outfit:
                     # ── 코디 소개 도중 수정 요청 ──────────────────────────────────
-                    # 이미 읽은 부분 + 남은 부분 컨텍스트 제공 → LLM이 수정 후 이어서 설명
-                    spoken_preview = spoken_outfit[:400] if spoken_outfit else "(없음)"
+                    # 짧게 수정 포인트만 확인하고 이어읽기는 read_outfit_verbatim(resume)에 맡긴다
+                    spoken_preview = spoken_outfit[:300] if spoken_outfit else "(없음)"
                     task_prompt = (
                         f"사용자가 코디 소개 중에 '{user_input}'라고 끼어들었어.\n\n"
                         f"【이미 소개한 코디】\n{spoken_preview}\n\n"
-                        f"【아직 소개 못 한 남은 코디】\n{remaining_outfit}\n\n"
                         "【할 일】\n"
                         "1. 사용자 요청을 자연스럽게 받아들여. 반말, 친근하게.\n"
-                        "2. 요청한 아이템을 바꾸고 나머지 코디도 어울리게 새로 맞춰.\n"
-                        "   상의가 바뀌면 하의·아우터도, 하의가 바뀌면 상의와 조화도 새로 제안.\n"
-                        "3. 이미 소개한 부분은 반복하지 말고, 수정된 코디로 남은 설명을 끝까지 이어서 해줘.\n"
-                        "4. 마지막에 '이 코디로 할래? 아니면 또 바꾸고 싶어?' 로 마무리."
+                        "2. 요청한 아이템을 바꾸고, 바뀐 아이템에 어울리게 연관 코디 수정 포인트를 2~3문장으로만 간결하게 알려줘.\n"
+                        "3. 이어서 설명하겠다는 말로 자연스럽게 마무리. (예: '잠깐, 이어서 설명해줄게!')"
                     )
                 elif interrupted_ctx:
                     # ── 일반 barge-in (스트리밍 중 끊김) ─────────────────────────
@@ -458,14 +474,28 @@ async def voice_ws(websocket: WebSocket):
     async def process_user_text(user_text: str) -> None:
         nonlocal interrupted
         interrupted = False
-        interrupted_ctx    = session.get("interrupted_ctx",  ""); session["interrupted_ctx"]  = ""
-        spoken_outfit      = session.get("spoken_outfit",    ""); session["spoken_outfit"]    = ""
-        remaining_outfit   = session.get("remaining_outfit", ""); session["remaining_outfit"] = ""
+        interrupted_ctx  = session.get("interrupted_ctx",  ""); session["interrupted_ctx"]  = ""
+        spoken_outfit    = session.get("spoken_outfit",    ""); session["spoken_outfit"]    = ""
+        remaining_outfit = session.get("remaining_outfit", ""); session["remaining_outfit"] = ""
+
+        # outfit_sentences가 남아있는데 remaining_outfit이 비어있으면 현재 위치로 재건
+        if not remaining_outfit and session.get("outfit_sentences"):
+            cnt   = session["outfit_sent_count"]
+            sents = session["outfit_sentences"]
+            if cnt < len(sents):
+                spoken_outfit    = " ".join(sents[:cnt])
+                remaining_outfit = " ".join(sents[cnt:])
+
         current = pending_sections[0] if pending_sections else "FOLLOWUP"
         await process_section(current, user_input=user_text, forced=False,
                               interrupted_ctx=interrupted_ctx,
                               spoken_outfit=spoken_outfit,
                               remaining_outfit=remaining_outfit)
+
+        # 코디 소개 중 끼어들었고 아직 읽을 문장이 남아있으면 outfit_continue 신호
+        # 재개 타이밍은 클라이언트가 오디오 완료 + 2초 정적 후 resume_outfit으로 전송
+        if session.get("outfit_sentences") and not interrupted:
+            await _send({"type": "outfit_continue"})
 
     # ── 메시지 루프 ────────────────────────────────────────────────────
     try:
@@ -517,18 +547,29 @@ async def voice_ws(websocket: WebSocket):
             # 3. barge-in 신호
             elif msg_type == "barge_in":
                 # 코디 낭독 중이었으면 spoken/remaining 계산 후 저장
+                # outfit_sentences / outfit_sent_count 는 유지 (resume 재개에 필요)
                 cnt   = session.get("outfit_sent_count", 0)
                 sents = session.get("outfit_sentences",  [])
                 if sents:
-                    session["spoken_outfit"]   = " ".join(sents[:cnt])
+                    session["spoken_outfit"]    = " ".join(sents[:cnt])
                     session["remaining_outfit"] = " ".join(sents[cnt:])
-                    session["outfit_sentences"]  = []
-                    session["outfit_sent_count"] = 0
                 # _cancel_current 안에서 partial_text → interrupted_ctx 저장
                 await _cancel_current()
                 await _set_state("listening")
 
-            # 4. 대화 종료
+            # 4. 코디 이어읽기 수동 재개 (클라이언트 fallback)
+            elif msg_type == "resume_outfit":
+                sents = session.get("outfit_sentences", [])
+                cnt   = session.get("outfit_sent_count", 0)
+                if sents and cnt < len(sents):
+                    current_task = asyncio.create_task(read_outfit_verbatim(resume=True))
+                else:
+                    session["outfit_sentences"]  = []
+                    session["outfit_sent_count"] = 0
+                    await _send({"type": "outfit_done"})
+                    await _set_state("listening")
+
+            # 5. 대화 종료
             elif msg_type == "end_conversation":
                 await _cancel_current()
                 context = {}
