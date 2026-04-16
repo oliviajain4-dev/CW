@@ -742,13 +742,22 @@ body {
 #designerPanel .panel-body {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
-#designerPanel .chat-window {
-  flex: 1;
-  min-height: 120px;
-  height: auto;
-  margin-bottom: 0;
+/* AI 코멘트 영역 — 항상 최상단 고정, 스크롤 가능 */
+.designer-comment-area {
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 55vh;
+  font-size: 14px;
+}
+.designer-comment-area .chat-msg {
+  max-width: 100%;
+}
+/* 음성 대화창 — ON 시 표시, 최대 220px */
+#designerPanel #designerChatWindow {
+  flex-shrink: 0;
+  min-height: 0;
   font-size: 14px;
 }
 /* 디자이너 패널 헤더 레이아웃 */
