@@ -21,11 +21,19 @@ static/uploads/*
 *.pth
 *.onnx
 
+# 3D 모델 파일 (용량 큼 — Cloudinary 또는 외부 스토리지 사용)
+*.fbx
+*.glb
+*.gltf
+
 # 사용자 프로필 (개인정보)
 user_profile.json
 
 # Docker
 .dockerignore
+
+# 모델 평가용 테스트 이미지 (임시 데이터)
+tests/
 
 # 생성된 문서 / 유틸 스크립트
 make_pdf.py
@@ -35,3 +43,5 @@ NotoSansKR.ttf
 # Claude 메모리
 .claude/
 
+# Google OAuth 클라이언트 시크릿 (절대 커밋 금지)
+google_client_secret.json

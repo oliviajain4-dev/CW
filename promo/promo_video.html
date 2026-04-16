@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>My Mini Co-di — 홍보 영상</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    background: #0a0a14;
+    font-family: 'Noto Sans KR', 'Segoe UI', sans-serif;
+    cursor: none;
+  }
+
+  /* ── 진행 바 ── */
+  #progress-bar {
+    position: fixed;
+    bottom: 0; left: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #9b59b6, #e91e8c);
+    width: 0%;
+    z-index: 999;
+    transition: none;
+  }
+
+  /* ── 재생/일시정지 버튼 ── */
+  #play-btn {
+    position: fixed;
+    bottom: 16px; right: 20px;
+    z-index: 999;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(8px);
+    transition: background 0.2s;
+    font-family: inherit;
+  }
+  #play-btn:hover { background: rgba(255,255,255,0.22); cursor: pointer; }
+
+  /* ── 씬 공통 ── */
+  .scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.45s ease;
+  }
+  .scene.active { opacity: 1; pointer-events: auto; }
+
+  /* ═══════════════════════════════════════
+     씬 1 — HOOK  "오늘 뭐 입지?"
+  ═══════════════════════════════════════ */
+  #s1 {
+    background: radial-gradient(ellipse at 60% 40%, #1a0a2e 0%, #0a0a14 70%);
+    flex-direction: column;
+    gap: 18px;
+  }
+  #s1 .sub {
+    font-size: 18px;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.6s ease 0.2s;
+  }
+  #s1 .big {
+    font-size: 96px;
+    font-weight: 900;
+    color: #fff;
+    line-height: 1;
+    opacity: 0;
+    transform: scale(0.85);
+    transition: all 0.55s cubic-bezier(.22,1,.36,1) 0.7s;
+  }
+  #s1 .accent {
+    color: #c084fc;
+    display: inline-block;
+  }
+  #s1.active .sub { opacity: 1; transform: translateY(0); }
+  #s1.active .big { opacity: 1; transform: scale(1); }
+
+  /* 파티클 */
+  .dot {
+    position: absolute;
+    border-radius: 50%;
+    opacity: 0.18;
+    animation: float linear infinite;
+  }
+  @keyframes float {
+    0% { transform: translateY(0) translateX(0); opacity: 0; }
+    10% { opacity: 0.18; }
+    90% { opacity: 0.18; }
+    100% { transform: translateY(-200px) translateX(30px); opacity: 0; }
+  }
+
+  /* ═══════════════════════════════════════
+     씬 2 — 문제 통계
+  ═══════════════════════════════════════ */
+  #s2 {
+    background: linear-gradient(135deg, #0f0f1e 0%, #1a0a2e 100%);
+    flex-direction: column;
+    gap: 10px;
+  }
+  #s2 .headline {
+    font-size: 22px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    opacity: 0;
+    transform: translateY(-12px);
+    transition: all 0.5s ease 0.1s;
+  }
+  #s2.active .headline { opacity: 1; transform: translateY(0); }
+
+  .stats-row {
+    display: flex;
+    gap: 50px;
+    align-items: center;
+  }
+  .stat-card {
+    text-align: center;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.55s cubic-bezier(.22,1,.36,1);
+  }
+  #s2.active .stat-card:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0.25s; }
+  #s2.active .stat-card:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.45s; }
+  #s2.active .stat-card:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.65s; }
+
+  .stat-num {
+    font-size: 80px;
+    font-weight: 900;
+    line-height: 1;
+    background: linear-gradient(135deg, #c084fc, #e91e8c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .stat-unit { font-size: 22px; color: #a78bfa; font-weight: 700; margin-left: 4px; }
+  .stat-label {
+    font-size: 15px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+  .stat-divider {
+    width: 1px;
+    height: 80px;
+    background: rgba(255,255,255,0.12);
+  }
+  #s2 .tagline {
+    font-size: 17px;
+    color: rgba(255,255,255,0.35);
+    margin-top: 16px;
+    opacity: 0;
+    transition: opacity 0.5s ease 1s;
+  }
+  #s2.active .tagline { opacity: 1; }
+
+  /* ═══════════════════════════════════════
+     씬 3 — 솔루션 등장
+  ═══════════════════════════════════════ */
+  #s3 {
+    background: radial-gradient(ellipse at 50% 50%, #1e0a3c 0%, #0a0a14 65%);
+    flex-direction: column;
+    gap: 20px;
+  }
+  #s3 .logo-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.6s cubic-bezier(.22,1,.36,1) 0.15s;
+  }
+  #s3.active .logo-wrap { opacity: 1; transform: scale(1); }
+
+  .logo-icon {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, #9b59b6, #e91e8c);
+    border-radius: 20px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px;
+    box-shadow: 0 0 40px rgba(155,89,182,0.6);
+  }
+  .logo-text-wrap .logo-en {
+    font-size: 42px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -1px;
+  }
+  .logo-text-wrap .logo-kr {
+    font-size: 16px;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 3px;
+    margin-top: 2px;
+  }
+
+  #s3 .tagline-main {
+    font-size: 24px;
+    color: rgba(255,255,255,0.8);
+    text-align: center;
+    line-height: 1.6;
+    max-width: 720px;
+    opacity: 0;
+    transform: translateY(14px);
+    transition: all 0.55s ease 0.7s;
+  }
+  #s3.active .tagline-main { opacity: 1; transform: translateY(0); }
+
+  #s3 .badge {
+    display: inline-block;
+    background: linear-gradient(90deg, rgba(155,89,182,0.25), rgba(233,30,140,0.25));
+    border: 1px solid rgba(155,89,182,0.5);
+    border-radius: 30px;
+    padding: 8px 24px;
+    font-size: 15px;
+    color: #c084fc;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity 0.5s ease 1.2s;
+  }
+  #s3.active .badge { opacity: 1; }
+
+  /* ═══════════════════════════════════════
+     씬 4 — 핵심 기능 3개
+  ═══════════════════════════════════════ */
+  #s4 {
+    background: linear-gradient(160deg, #0d0d1e 0%, #1a0a2e 100%);
+    flex-direction: column;
+    gap: 16px;
+  }
+  #s4 .s4-title {
+    font-size: 16px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.5s ease 0.1s;
+  }
+  #s4.active .s4-title { opacity: 1; }
+
+  .feature-row {
+    display: flex;
+    gap: 28px;
+    align-items: stretch;
+  }
+  .feat-card {
+    width: 340px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 20px;
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(24px);
+    transition: all 0.55s cubic-bezier(.22,1,.36,1);
+    position: relative;
+    overflow: hidden;
+  }
+  .feat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    opacity: 0.7;
+  }
+  #s4.active .feat-card:nth-child(1) { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+  #s4.active .feat-card:nth-child(2) { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+  #s4.active .feat-card:nth-child(3) { opacity: 1; transform: translateY(0); transition-delay: 0.6s; }
+
+  .feat-icon {
+    font-size: 40px;
+    line-height: 1;
+  }
+  .feat-name {
+    font-size: 19px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.35;
+  }
+  .feat-desc {
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.6;
+  }
+  .feat-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--accent);
+    color: #fff;
+    align-self: flex-start;
+    opacity: 0.9;
+    margin-top: 4px;
+  }
+
+  /* ═══════════════════════════════════════
+     씬 5 — 차별점 키워드
+  ═══════════════════════════════════════ */
+  #s5 {
+    background: radial-gradient(ellipse at 30% 60%, #2d0a4e 0%, #0a0a14 60%);
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+  #s5 .kw-label {
+    font-size: 14px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    opacity: 0;
+    transition: opacity 0.5s 0.1s;
+  }
+  #s5.active .kw-label { opacity: 1; }
+
+  .kw-list {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    align-items: flex-start;
+  }
+  .kw-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: translateX(-30px);
+    transition: all 0.55s cubic-bezier(.22,1,.36,1);
+  }
+  #s5.active .kw-item:nth-child(1) { opacity: 1; transform: translateX(0); transition-delay: 0.25s; }
+  #s5.active .kw-item:nth-child(2) { opacity: 1; transform: translateX(0); transition-delay: 0.5s; }
+  #s5.active .kw-item:nth-child(3) { opacity: 1; transform: translateX(0); transition-delay: 0.75s; }
+
+  .kw-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #c084fc, #e91e8c);
+    flex-shrink: 0;
+  }
+  .kw-text {
+    font-size: 36px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  .kw-text span {
+    background: linear-gradient(90deg, #c084fc, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  #s5 .vs-line {
+    font-size: 15px;
+    color: rgba(255,255,255,0.28);
+    text-align: center;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding-top: 20px;
+    width: 100%;
+    max-width: 580px;
+    opacity: 0;
+    transition: opacity 0.5s 1.1s;
+  }
+  #s5.active .vs-line { opacity: 1; }
+
+  /* ═══════════════════════════════════════
+     씬 6 — CTA 마무리
+  ═══════════════════════════════════════ */
+  #s6 {
+    background: radial-gradient(ellipse at 50% 50%, #1a0a2e 0%, #0a0a14 60%);
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+
+  #s6 .final-sub {
+    font-size: 18px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 4px;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: all 0.5s ease 0.2s;
+  }
+  #s6.active .final-sub { opacity: 1; transform: translateY(0); }
+
+  #s6 .final-main {
+    font-size: 52px;
+    font-weight: 900;
+    color: #fff;
+    text-align: center;
+    line-height: 1.3;
+    opacity: 0;
+    transform: scale(0.92);
+    transition: all 0.6s cubic-bezier(.22,1,.36,1) 0.55s;
+  }
+  #s6.active .final-main { opacity: 1; transform: scale(1); }
+
+  #s6 .final-main .hl {
+    background: linear-gradient(90deg, #c084fc, #e91e8c);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  #s6 .pill-row {
+    display: flex;
+    gap: 14px;
+    opacity: 0;
+    transition: opacity 0.5s 1.1s;
+  }
+  #s6.active .pill-row { opacity: 1; }
+
+  .pill {
+    padding: 8px 20px;
+    border-radius: 30px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.7);
+  }
+
+  #s6 .logo-final {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transition: opacity 0.6s ease 1.5s;
+    margin-top: 8px;
+  }
+  #s6.active .logo-final { opacity: 1; }
+
+  .logo-final .icon-sm {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, #9b59b6, #e91e8c);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 24px rgba(155,89,182,0.5);
+  }
+  .logo-final .name {
+    font-size: 22px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  .logo-final .sub {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+
+  /* 화면 가장자리 그라디언트 (시네마틱) */
+  .vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* 씬 번호 표시 */
+  #scene-counter {
+    position: fixed;
+    top: 16px; right: 20px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 2px;
+    z-index: 999;
+  }
+</style>
+</head>
+<body>
+
+<div class="vignette"></div>
+<div id="progress-bar"></div>
+<div id="scene-counter">01 / 06</div>
+<button id="play-btn" onclick="togglePlay()">⏸ 일시정지</button>
+
+<!-- ───── 씬 1 : HOOK ───── -->
+<div class="scene active" id="s1">
+  <!-- 파티클 -->
+  <div class="dot" style="width:6px;height:6px;background:#c084fc;left:15%;top:70%;animation-duration:8s;animation-delay:0s;"></div>
+  <div class="dot" style="width:4px;height:4px;background:#e91e8c;left:80%;top:60%;animation-duration:10s;animation-delay:1s;"></div>
+  <div class="dot" style="width:8px;height:8px;background:#9b59b6;left:40%;top:80%;animation-duration:12s;animation-delay:2s;"></div>
+  <div class="dot" style="width:5px;height:5px;background:#c084fc;left:65%;top:75%;animation-duration:9s;animation-delay:0.5s;"></div>
+  <div class="dot" style="width:3px;height:3px;background:#e91e8c;left:25%;top:85%;animation-duration:11s;animation-delay:1.5s;"></div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:16px;">
+    <div class="sub">매일 아침</div>
+    <div class="big">오늘 뭐 <span class="accent">입지</span>?</div>
+  </div>
+</div>
+
+<!-- ───── 씬 2 : 문제 통계 ───── -->
+<div class="scene" id="s2">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+    <div class="headline">당신의 아침이 이렇게 시작됩니다</div>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div><span class="stat-num">67</span><span class="stat-unit">벌</span></div>
+        <div class="stat-label">평균 의류 보유량<br>실제 착용률 단 20%</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-card">
+        <div><span class="stat-num">17</span><span class="stat-unit">분</span></div>
+        <div class="stat-label">매일 아침<br>코디 결정 시간</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-card">
+        <div><span class="stat-num">180</span><span class="stat-unit">일</span></div>
+        <div class="stat-label">연간 기온차 10°C+<br>날씨 고려 못 한 코디</div>
+      </div>
+    </div>
+    <div class="tagline">옷은 충분합니다 — 코디를 모르고 있을 뿐</div>
+  </div>
+</div>
+
+<!-- ───── 씬 3 : 솔루션 등장 ───── -->
+<div class="scene" id="s3">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:28px;">
+    <div class="logo-wrap">
+      <div class="logo-icon">👗</div>
+      <div class="logo-text-wrap">
+        <div class="logo-en">My Mini Co-di</div>
+        <div class="logo-kr">내 옷장의 코디</div>
+      </div>
+    </div>
+    <div class="tagline-main">
+      새 옷을 사라고 강요하지 않는<br>
+      <strong style="color:#fff;">유일한 AI 개인 스타일리스트</strong>
+    </div>
+    <div class="badge">✦ 내 옷장 × AI × 날씨 × 나</div>
+  </div>
+</div>
+
+<!-- ───── 씬 4 : 핵심 기능 3개 ───── -->
+<div class="scene" id="s4">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
+    <div class="s4-title">Core Features</div>
+    <div class="feature-row">
+      <div class="feat-card" style="--accent: linear-gradient(90deg,#9b59b6,#c084fc);">
+        <div class="feat-icon">🤖</div>
+        <div class="feat-name">AI 옷장<br>자동 분석</div>
+        <div class="feat-desc">사진 한 장 → 카테고리·보온도·질감<br>FashionSigLIP 패션 전용 모델</div>
+        <div class="feat-badge" style="background:linear-gradient(90deg,#9b59b6,#c084fc);">자동 태깅</div>
+      </div>
+      <div class="feat-card" style="--accent: linear-gradient(90deg,#0984e3,#00cec9);">
+        <div class="feat-icon">☀️</div>
+        <div class="feat-name">실시간 날씨<br>코디 추천</div>
+        <div class="feat-desc">기상청 API + Claude AI<br>체감온도 8단계 맞춤 코디</div>
+        <div class="feat-badge" style="background:linear-gradient(90deg,#0984e3,#00cec9);">실시간 연동</div>
+      </div>
+      <div class="feat-card" style="--accent: linear-gradient(90deg,#e91e8c,#f59e0b);">
+        <div class="feat-icon">🎙️</div>
+        <div class="feat-name">음성 AI<br>스타일 상담</div>
+        <div class="feat-desc">말로 물어보면 2초 안에 답변<br>Gemini Live · Google TTS</div>
+        <div class="feat-badge" style="background:linear-gradient(90deg,#e91e8c,#f59e0b);">2초 응답</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───── 씬 5 : 차별점 ───── -->
+<div class="scene" id="s5">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:22px;">
+    <div class="kw-label">Why Us</div>
+    <div class="kw-list">
+      <div class="kw-item">
+        <div class="kw-dot"></div>
+        <div class="kw-text">내 옷장 기반 <span>초개인화</span></div>
+      </div>
+      <div class="kw-item">
+        <div class="kw-dot"></div>
+        <div class="kw-text">음성 AI <span>2초</span> 응답</div>
+      </div>
+      <div class="kw-item">
+        <div class="kw-dot"></div>
+        <div class="kw-text">개인정보 <span>완전 격리</span></div>
+      </div>
+    </div>
+    <div class="vs-line">6개 핵심 기능 전부 ★★★ — 경쟁사 대비 유일한 완전 지원</div>
+  </div>
+</div>
+
+<!-- ───── 씬 6 : CTA ───── -->
+<div class="scene" id="s6">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
+    <div class="final-sub">AI Fashion Tech</div>
+    <div class="final-main">
+      매일 아침 <span class="hl">17분</span>을<br>
+      돌려드립니다
+    </div>
+    <div class="pill-row">
+      <div class="pill">🤖 AI 분석</div>
+      <div class="pill">☀️ 날씨 코디</div>
+      <div class="pill">🎙️ 음성 상담</div>
+      <div class="pill">🔐 완전 격리</div>
+    </div>
+    <div class="logo-final">
+      <div class="icon-sm">👗</div>
+      <div>
+        <div class="name">My Mini Co-di</div>
+        <div class="sub">내 옷장의 코디 · 2026 AI Fashion Tech</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ── 씬 타이밍 (ms 단위) ── */
+  const SCENES = [
+    { id: 's1', duration: 2200 },  // 0 ~ 2.2s
+    { id: 's2', duration: 2600 },  // 2.2 ~ 4.8s
+    { id: 's3', duration: 2500 },  // 4.8 ~ 7.3s
+    { id: 's4', duration: 3000 },  // 7.3 ~ 10.3s
+    { id: 's5', duration: 2200 },  // 10.3 ~ 12.5s
+    { id: 's6', duration: 2500 },  // 12.5 ~ 15s
+  ];
+
+  const TOTAL = SCENES.reduce((a, b) => a + b.duration, 0); // ~15000ms
+
+  let elapsed = 0;
+  let currentScene = 0;
+  let paused = false;
+  let lastTime = null;
+  let rafId = null;
+
+  const bar = document.getElementById('progress-bar');
+  const counter = document.getElementById('scene-counter');
+
+  function showScene(idx) {
+    document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById(SCENES[idx].id);
+    if (el) el.classList.add('active');
+    counter.textContent = `${String(idx + 1).padStart(2, '0')} / ${String(SCENES.length).padStart(2, '0')}`;
+  }
+
+  function tick(ts) {
+    if (paused) { lastTime = null; return; }
+    if (!lastTime) lastTime = ts;
+    const delta = ts - lastTime;
+    lastTime = ts;
+
+    elapsed = Math.min(elapsed + delta, TOTAL);
+
+    /* 진행 바 업데이트 */
+    bar.style.width = (elapsed / TOTAL * 100) + '%';
+
+    /* 현재 씬 계산 */
+    let acc = 0;
+    for (let i = 0; i < SCENES.length; i++) {
+      acc += SCENES[i].duration;
+      if (elapsed < acc) {
+        if (i !== currentScene) { currentScene = i; showScene(i); }
+        break;
+      }
+    }
+
+    if (elapsed >= TOTAL) {
+      /* 영상 종료 — 처음부터 반복 */
+      elapsed = 0;
+      currentScene = 0;
+      showScene(0);
+      lastTime = null;
+    }
+
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function togglePlay() {
+    paused = !paused;
+    document.getElementById('play-btn').textContent = paused ? '▶ 재생' : '⏸ 일시정지';
+    if (!paused) rafId = requestAnimationFrame(tick);
+  }
+
+  /* 시작 */
+  showScene(0);
+  rafId = requestAnimationFrame(tick);
+</script>
+</body>
+</html>
