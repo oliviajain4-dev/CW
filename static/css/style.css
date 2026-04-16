@@ -651,39 +651,63 @@ body {
 .designer-comment {
   font-size: 12px; line-height: 1.75; color: #444;
 }
+
+/* ── 접기/펼치기 래퍼 ──────────────────────────────────────────── */
 .designer-comment-wrap {
-  position: relative;
-}
-.designer-comment-wrap.collapsed {
-  max-height: 160px;
   overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.28s ease;
+  opacity: 0;
 }
-.designer-fade {
-  display: none;
+.designer-comment-wrap.expanded {
+  max-height: 1200px;
+  opacity: 1;
 }
-.designer-comment-wrap.collapsed .designer-fade {
-  display: block;
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 48px;
-  background: linear-gradient(transparent, #fff);
-  pointer-events: none;
-}
+
+/* ── 오늘의 스타일링 토글 버튼 ─────────────────────────────────── */
 .designer-toggle-btn {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 7px;
   width: 100%;
-  margin-top: 6px;
-  padding: 5px 0;
-  background: none;
-  border: 1px solid #e8c0d0;
-  border-radius: 8px;
-  color: #c06080;
-  font-size: 11px;
+  padding: 9px 14px;
+  margin-bottom: 2px;
+  background: linear-gradient(105deg, #fce8f3 0%, #ede0f8 100%);
+  border: 1.5px solid rgba(180, 130, 210, 0.25);
+  border-radius: 14px;
   cursor: pointer;
-  transition: background 0.15s;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8855bb;
+  letter-spacing: 0.04em;
+  transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+  box-shadow: 0 1px 6px rgba(150, 100, 200, 0.10);
 }
 .designer-toggle-btn:hover {
-  background: #fdf0f5;
+  background: linear-gradient(105deg, #f8d8ee 0%, #e4d0f5 100%);
+  box-shadow: 0 3px 12px rgba(150, 100, 200, 0.18);
+  transform: translateY(-1px);
+}
+.designer-toggle-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(150, 100, 200, 0.12);
+}
+.dtb-icon {
+  font-size: 13px;
+  color: #c070d0;
+  flex-shrink: 0;
+}
+.dtb-label {
+  flex: 1;
+  text-align: left;
+}
+.dtb-chevron {
+  font-size: 15px;
+  color: #aa77cc;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* 옷장 패널 그리드 */

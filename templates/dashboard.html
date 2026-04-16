@@ -155,9 +155,16 @@
     <button class="panel-close" onclick="closePanel('designerPanel')">✕</button>
   </div>
   <div class="panel-body" id="designerBody">
-    <!-- ① AI 수석 디자이너 코멘트 — 항상 최상단 고정 -->
-    <div id="designerCommentArea" class="designer-comment-area">
-      <p class="empty-msg" style="color:#aaa;font-size:12px;">⏳ AI 스타일링 분석 중...</p>
+    <!-- ① AI 수석 디자이너 코멘트 — 접기/펼치기 -->
+    <button class="designer-toggle-btn" id="designerToggleBtn" onclick="toggleDesignerComment()">
+      <span class="dtb-icon">✦</span>
+      <span class="dtb-label">오늘의 스타일링 코멘트</span>
+      <span class="dtb-chevron">▾</span>
+    </button>
+    <div class="designer-comment-wrap" id="designerCommentWrap">
+      <div id="designerCommentArea" class="designer-comment-area">
+        <p class="empty-msg" style="color:#aaa;font-size:12px;">⏳ AI 스타일링 분석 중...</p>
+      </div>
     </div>
     <!-- 구분선 (음성 대화 시작 시 표시) -->
     <div id="designerDivider" style="display:none; border-top:1px solid rgba(0,0,0,0.12); margin:6px 0 0;"></div>
@@ -356,6 +363,47 @@
       <div class="detail-item"><span class="detail-icon">👜</span><div><strong>악세서리</strong><p>${style_rec.acc_rec}</p></div></div>`;
   }
 
+  // ── 링크 정규화 (target=_blank, 무신사 텍스트 보정) — 전역 스코프 ──
+  function normalizeLinks(container) {
+    if (!container) return;
+    const anchors = container.querySelectorAll('a[href]');
+    anchors.forEach(function (a) {
+      const href = a.getAttribute('href');
+      if (!href) return;
+      if (!a.hasAttribute('target')) a.setAttribute('target', '_blank');
+      if (!a.hasAttribute('rel')) a.setAttribute('rel', 'noopener');
+      const text = (a.textContent || '').trim();
+      if (!text || text === 'undefined') {
+        if (href.includes('musinsa.com')) {
+          const q = new URL(href, window.location.origin).searchParams.get('keyword')
+                 || new URL(href, window.location.origin).searchParams.get('q');
+          a.textContent = q ? decodeURIComponent(q).replace(/\+/g, ' ') : '무신사 쇼핑몰';
+        } else {
+          a.textContent = href;
+        }
+      }
+    });
+  }
+
+  // ── 수석 디자이너 코멘트 접기/펼치기 ────────────────────────────
+  function toggleDesignerComment(expand) {
+    const wrap   = document.getElementById('designerCommentWrap');
+    const btn    = document.getElementById('designerToggleBtn');
+    if (!wrap || !btn) return;
+    const chevron = btn.querySelector('.dtb-chevron');
+    const label   = btn.querySelector('.dtb-label');
+    const shouldExpand = (expand !== undefined) ? expand : !wrap.classList.contains('expanded');
+    if (shouldExpand) {
+      wrap.classList.add('expanded');
+      if (chevron) chevron.style.transform = 'rotate(180deg)';
+      if (label)   label.textContent = '스타일링 코멘트 접기';
+    } else {
+      wrap.classList.remove('expanded');
+      if (chevron) chevron.style.transform = 'rotate(0deg)';
+      if (label)   label.textContent = '오늘의 스타일링 코멘트';
+    }
+  }
+
   // ── 수석 디자이너 패널 — 코멘트를 첫 번째 대화 버블로 ──────────
   function fillDesignerPanel(comment) {
     // AI 코멘트는 designerCommentArea에 표시 (항상 최상단 고정)
@@ -419,7 +467,7 @@
         }
       }
 
-      // TTS 오디오 미리 fetch
+      // TTS 오디오 미리 fetch — 캐시에도 저장 (ON 버튼에서 즉시 재사용)
       fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -429,6 +477,7 @@
         .then(res => {
           if (!res.audio) { console.warn('[TTS] audio 없음:', res); return; }
           _ttsB64 = res.audio;
+          if (typeof chatContext !== 'undefined') chatContext.outfit_tts_b64 = res.audio; // 캐시
           _tryPlay();
         })
         .catch(err => { console.error('[TTS] fetch 오류:', err); });
@@ -720,6 +769,25 @@
       if (playCtx) nextPlay = playCtx.currentTime;
     };
 
+    // ── b64를 클로저로 캡처해서 resume 후 직접 재생 ──────────────────
+    // enqueuePCM과 달리 _pendingPCM을 거치지 않으므로 stopAudio() 영향 없음
+    window.forcePlayNow = function (b64) {
+      if (!b64) return;
+      if (!playCtx || playCtx.state === 'closed') {
+        try { playCtx = new AudioContext({ sampleRate: OUT_SR }); nextPlay = 0; playSources = []; }
+        catch (e) { _pendingPCM = b64; return; }
+      }
+      if (playCtx.state === 'running') {
+        nextPlay = Math.max(nextPlay, playCtx.currentTime);
+        _playB64(b64);
+      } else {
+        // suspended → resume 후 b64를 클로저로 직접 전달 (변수 참조 없음)
+        playCtx.resume()
+          .then(function () { nextPlay = Math.max(nextPlay, playCtx.currentTime); _playB64(b64); })
+          .catch(function () { _pendingPCM = b64; }); // 정책 차단 시 폴백
+      }
+    };
+
     // ── 첫 사용자 제스처에서 AudioContext 언락 + 대기 오디오 재생 ──
     function _onFirstGesture() {
       window.ensurePlayCtx();
@@ -756,7 +824,8 @@
     let recognition = null;
     let reconnTimer = null;
     let _recognizing = false;
-    let _pendingUserDiv = null;   // 사용자 말풍선 미리보기 div
+    let _pendingUserDiv = null;       // 사용자 말풍선 미리보기 div
+    let _currentAssistantDiv = null;  // 현재 쌓이고 있는 AI 말풍선 (sentence_text 점진적 표시)
 
     // ── 오디오 함수는 위 IIFE에서 window에 노출됨 (enqueuePCM, stopAudio, ensurePlayCtx)
     const enqueuePCM    = window.enqueuePCM;
@@ -878,25 +947,7 @@
       return wrap;
     }
 
-    function normalizeLinks(container) {
-      if (!container) return;
-      const anchors = container.querySelectorAll('a[href]');
-      anchors.forEach(a => {
-        const href = a.getAttribute('href');
-        if (!href) return;
-        if (!a.hasAttribute('target')) a.setAttribute('target', '_blank');
-        if (!a.hasAttribute('rel')) a.setAttribute('rel', 'noopener');
-        const text = (a.textContent || '').trim();
-        if (!text || text === 'undefined') {
-          if (href.includes('musinsa.com')) {
-            const query = new URL(href, window.location.origin).searchParams.get('keyword') || new URL(href, window.location.origin).searchParams.get('q');
-            a.textContent = query ? decodeURIComponent(query).replace(/\+/g, ' ') : '무신사 쇼핑몰';
-          } else {
-            a.textContent = href;
-          }
-        }
-      });
-    }
+    // normalizeLinks는 전역 스코프에 정의됨 (script block 1)
 
     function addLog(text, role) {
       if (!text) return;
@@ -1014,16 +1065,63 @@
           }
         } else if (msg.type === 'audio_chunk') {
           enqueuePCM(msg.data);
+        } else if (msg.type === 'sentence_text') {
+          // 문장 단위로 AI 말풍선에 점진적으로 텍스트 추가
+          const win = document.getElementById('designerChatWindow');
+          if (win) {
+            if (win.style.display === 'none') {
+              win.style.display = 'flex';
+              win.style.flexDirection = 'column';
+              win.style.gap = '6px';
+              win.style.overflowY = 'auto';
+              const hr = document.getElementById('designerDivider');
+              if (hr) hr.style.display = 'block';
+            }
+            if (!_currentAssistantDiv) {
+              _currentAssistantDiv = document.createElement('div');
+              _currentAssistantDiv.className = 'chat-msg assistant';
+              win.appendChild(_currentAssistantDiv);
+            }
+            // 문장을 span으로 이어붙임
+            const span = document.createElement('span');
+            span.textContent = msg.text + ' ';
+            _currentAssistantDiv.appendChild(span);
+            win.scrollTop = win.scrollHeight;
+          }
         } else if (msg.type === 'response_text') {
-          // 처리 중 임시 말풍선 제거 후 실제 응답 표시
+          // 전체 텍스트 도착 → _currentAssistantDiv를 마크다운으로 최종 렌더링
           const thinkDiv = document.getElementById('_voiceThinkDiv');
           if (thinkDiv) thinkDiv.remove();
-          addLog(msg.text, 'assistant');
+          // _savedMessages 누적 + 숨김 chatLog 기록
+          _savedMessages.push({ role: 'assistant', content: msg.text });
+          if (_savedMessages.length > 20) _savedMessages = _savedMessages.slice(-20);
+          if (chatLog) {
+            const d = document.createElement('div');
+            d.className = 'voice-log-assistant';
+            d.textContent = msg.text;
+            chatLog.appendChild(d);
+          }
+          // 점진적으로 쌓인 div를 마크다운으로 재렌더링
+          if (_currentAssistantDiv) {
+            const html = (typeof marked !== 'undefined')
+              ? marked.parse(msg.text)
+              : msg.text.replace(/\n/g, '<br>');
+            _currentAssistantDiv.innerHTML = html;
+            normalizeLinks(_currentAssistantDiv);
+            const win = document.getElementById('designerChatWindow');
+            if (win) win.scrollTop = win.scrollHeight;
+            _currentAssistantDiv = null;
+          } else {
+            // sentence_text 없이 response_text만 온 경우 (폴백)
+            addLog(msg.text, 'assistant');
+          }
         } else if (msg.type === 'error') {
           addLog('오류: ' + msg.message, 'assistant');
           if (inVoice) { serverState = 'listening'; updateUI('listening'); startRecognition(); }
         }
-        // ping·done: 무시
+        // done: _currentAssistantDiv 초기화 (response_text 없이 끝나는 경우 대비)
+        if (msg.type === 'done') { _currentAssistantDiv = null; }
+        // ping: 무시
       };
 
       ws.onerror = () => {
@@ -1051,16 +1149,35 @@
           serverState = 'listening';
           updateUI('listening');
         }
+        if (_pendingUserDiv) return; // 이미 표시 중
         // 사용자 말풍선 미리 표시 (입력 중...)
-        const win = document.getElementById('designerChatWindow');
-        if (win && !_pendingUserDiv) {
-          _pendingUserDiv = document.createElement('div');
-          _pendingUserDiv.className = 'chat-msg user';
-          _pendingUserDiv.style.cssText = 'opacity:0.55;font-style:italic;';
-          _pendingUserDiv.textContent = '...';
-          win.appendChild(_pendingUserDiv);
-          win.scrollTop = win.scrollHeight;
+        _pendingUserDiv = document.createElement('div');
+        _pendingUserDiv.className = 'chat-msg user';
+        _pendingUserDiv.style.cssText = 'opacity:0.55;font-style:italic;';
+        _pendingUserDiv.textContent = '...';
+
+        if (_currentAssistantDiv) {
+          // barge_in: AI가 말하는 도중 끊은 경우 → AI 말풍선 바로 뒤에 삽입
+          // AI 말풍선을 마크다운으로 최종 렌더링
+          const partialText = _currentAssistantDiv.textContent.trim();
+          if (partialText) {
+            const html = (typeof marked !== 'undefined')
+              ? marked.parse(partialText)
+              : partialText.replace(/\n/g, '<br>');
+            _currentAssistantDiv.innerHTML = html;
+            normalizeLinks(_currentAssistantDiv);
+            _savedMessages.push({ role: 'assistant', content: partialText });
+            if (_savedMessages.length > 20) _savedMessages = _savedMessages.slice(-20);
+          }
+          _currentAssistantDiv.after(_pendingUserDiv);
+          _currentAssistantDiv = null;
+        } else {
+          // AI 말이 끝난 후 사용자가 말하는 경우 → 맨 아래 추가
+          const win = document.getElementById('designerChatWindow');
+          if (win) win.appendChild(_pendingUserDiv);
         }
+        const win = document.getElementById('designerChatWindow');
+        if (win) win.scrollTop = win.scrollHeight;
       };
 
       // 인식 완료 → user_text 전송
@@ -1144,7 +1261,52 @@
     micBtn.addEventListener('click', (e) => {
       e.stopImmediatePropagation(); // voice.js DOMContentLoaded 핸들러 충돌 방지
       if (!inVoice) {
-        // ── 마이크 ON — 날씨·프로필 재조회 후 WebSocket 연결 ──────
+        // ══ 마이크 ON ══════════════════════════════════════════════
+        // ① AudioContext unlock — 반드시 제스처 동기 구간에서 호출
+        ensurePlayCtx();
+
+        // ② 음성 상태 즉시 전환 (비동기 fetch 기다리지 않음)
+        stopAudio();
+        inVoice = true;
+        setupRecognition();
+        startRecognition();
+
+        // ③ 수석 디자이너 패널 자동 오픈
+        if (typeof togglePanel === 'function') {
+          const dp = document.getElementById('designerPanel');
+          if (dp && !dp.classList.contains('open')) togglePanel('designerPanel');
+        }
+
+        // ④ 코멘트 TTS 재생 + WebSocket 연결 — 동기 구간에서 바로 실행
+        const cachedTts = chatContext.outfit_tts_b64;
+        const comment   = chatContext.outfit_comment;
+        if (cachedTts) {
+          // 미리 받아둔 캐시 → forcePlayNow (클로저 캡처, stopAudio 영향 없음)
+          serverState = 'speaking';
+          updateUI('speaking');
+          window.forcePlayNow(cachedTts);
+          connectWS(true);  // skip_greeting: true
+        } else if (comment) {
+          // 캐시 미준비 → TTS fetch 후 forcePlayNow
+          serverState = 'speaking';
+          updateUI('speaking');
+          fetch('/api/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: comment })
+          })
+            .then(r => r.json())
+            .then(res => { if (res.audio) window.forcePlayNow(res.audio); })
+            .catch(() => {})
+            .finally(() => { connectWS(true); });
+        } else {
+          // 코멘트 없음 → GREETING 포함 일반 연결
+          serverState = 'listening';
+          updateUI('listening');
+          connectWS();
+        }
+
+        // ⑤ 날씨·프로필 컨텍스트 업데이트 — 백그라운드 (TTS 재생과 무관)
         fetch('/api/recommend?quick=true')
           .then(r => r.json())
           .then(data => {
@@ -1155,20 +1317,7 @@
             }
             if (data.user_profile) chatContext.user_profile = data.user_profile;
           })
-          .catch(() => { })
-          .finally(() => {
-            stopAudio();  // 디자이너 패널 자동 읽기 중단
-            inVoice = true;
-            serverState = 'listening';
-            updateUI('listening');
-            setupRecognition();
-            connectWS();
-            // 수석 디자이너 패널 자동 오픈
-            if (typeof togglePanel === 'function') {
-              const dp = document.getElementById('designerPanel');
-              if (dp && !dp.classList.contains('open')) togglePanel('designerPanel');
-            }
-          });
+          .catch(() => {});
 
       } else {
         // ── 마이크 OFF ─────────────────────────────────────────

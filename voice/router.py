@@ -309,6 +309,8 @@ async def voice_ws(websocket: WebSocket):
                             speaking_started = True
                         pcm = await synthesize_speech(cleaned)
                         if pcm:
+                            # 문장 텍스트를 오디오와 함께 전송 → 클라이언트 점진적 표시
+                            await _send({"type": "sentence_text", "text": sentence})
                             await _send({"type": "audio_chunk", "data": base64.b64encode(pcm).decode()})
                     except Exception:
                         pass
@@ -326,6 +328,7 @@ async def voice_ws(websocket: WebSocket):
                             speaking_started = True
                         pcm = await synthesize_speech(cleaned)
                         if pcm:
+                            await _send({"type": "sentence_text", "text": text_buf.strip()})
                             await _send({"type": "audio_chunk", "data": base64.b64encode(pcm).decode()})
                     except Exception:
                         pass
