@@ -59,13 +59,27 @@
     <a href="{{ url_for('profile') }}">👤 Profile</a>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
   <script>
     if (typeof marked !== "undefined") {
       const renderer = new marked.Renderer();
-      renderer.link = function(href, title, text) {
-        const label = (typeof text === 'string' && text.trim()) ? text.trim() : href;
-        const titleAttr = title ? ` title="${title}"` : '';
+      // marked v5+: link() 첫 인자가 token 객체 {href, title, text, tokens}
+      // marked v4 이하: link(href, title, text) — 각각 string
+      // 두 API를 모두 처리
+      renderer.link = function(hrefOrToken, title, text) {
+        let href, titleVal, label;
+        if (hrefOrToken && typeof hrefOrToken === 'object') {
+          // v5+ token 기반
+          href     = hrefOrToken.href || '';
+          titleVal = hrefOrToken.title || '';
+          label    = hrefOrToken.text || href;
+        } else {
+          // v4 이하 legacy
+          href     = hrefOrToken || '';
+          titleVal = title || '';
+          label    = (typeof text === 'string' && text.trim()) ? text.trim() : href;
+        }
+        const titleAttr = titleVal ? ` title="${titleVal}"` : '';
         return `<a href="${href}" target="_blank" rel="noopener"${titleAttr}>${label}</a>`;
       };
       marked.setOptions({ breaks: true, gfm: true, renderer });

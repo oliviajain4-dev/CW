@@ -762,11 +762,7 @@ body {
   flex-shrink: 0;
   padding-top: 8px;
 }
-/* 디자이너 패널: panel-body가 스크롤을 전담 */
-#designerPanel .panel-body {
-  display: block;
-  overflow-y: auto;
-}
+/* 디자이너 패널: panel-body가 스크롤을 전담 (하단 규칙과 병합됨 — 이 블록은 제거 가능) */
 /* AI 코멘트 영역 — 항상 최상단, 전체 내용 표시 */
 .designer-comment-area {
   font-size: 14px;
@@ -812,9 +808,9 @@ body {
   flex-shrink: 0;
 }
 #designerPanel .designer-comment-wrap {
-  flex-shrink: 0;
+  /* flex-shrink: 0 제거 → 패널 높이보다 길면 flex가 줄여서 overflow-y 스크롤 활성화 */
   overflow-y: auto;
-  min-height: 30px;
+  min-height: 60px;
 }
 #designerPanel #designerVoiceStatus {
   flex-shrink: 0;

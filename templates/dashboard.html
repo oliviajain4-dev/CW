@@ -1020,6 +1020,13 @@
           // 구분선 삽입 (AI 코멘트 영역과 분리)
           const hr = document.getElementById('designerDivider');
           if (hr) hr.style.display = 'block';
+          // 코멘트 영역 초기 높이 고정 — 드래그 전까지 합리적인 분할 유지
+          const cw = document.getElementById('designerCommentWrap');
+          if (cw && !cw.style.height) {
+            const initH = Math.min(cw.scrollHeight, 200);
+            cw.style.height = initH + 'px';
+            cw.style.maxHeight = initH + 'px';
+          }
         }
         const div = document.createElement('div');
         div.className = 'chat-msg ' + (role === 'assistant' ? 'assistant' : 'user');
@@ -1428,6 +1435,9 @@
         if (chatWin) { chatWin.style.display = 'none'; chatWin.innerHTML = ''; }
         const divider = document.getElementById('designerDivider');
         if (divider) divider.style.display = 'none';
+        // 코멘트 영역 높이 리셋 — 다시 flex가 전체 공간 차지
+        const cw2 = document.getElementById('designerCommentWrap');
+        if (cw2) { cw2.style.height = ''; cw2.style.maxHeight = ''; }
       }
     });
 
