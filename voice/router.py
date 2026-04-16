@@ -380,13 +380,20 @@ async def voice_ws(websocket: WebSocket):
                 prev = msg.get("prev_messages", [])
                 if prev and isinstance(prev, list):
                     messages.extend(prev[-20:])
-                pending_sections[:] = ["GREETING"]
 
                 profile = context.get("user_profile", {})
                 session["user_name"]         = profile.get("name", "")
                 sens_raw = profile.get("sensitivity", 3)
                 session["sensitivity_label"] = _SENSITIVITY_MAP.get(int(sens_raw), "보통")
-                current_task = asyncio.create_task(process_section("GREETING"))
+
+                skip_greeting = msg.get("skip_greeting", False)
+                if skip_greeting:
+                    # 수석 디자이너 TTS가 이미 코디를 소개함 → GREETING 생략, 바로 듣기
+                    pending_sections[:] = []
+                    await _set_state("listening")
+                else:
+                    pending_sections[:] = ["GREETING"]
+                    current_task = asyncio.create_task(process_section("GREETING"))
 
             # 2. 사용자 음성 텍스트 수신 (Web Speech API 변환 결과)
             elif msg_type == "user_text":

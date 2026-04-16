@@ -162,31 +162,48 @@ layering_needed=True
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=1300,
+        max_tokens=2500,
         messages=[{"role": "user", "content": user_prompt}],
         system=system_prompt
     )
 
     raw = message.content[0].text.strip()
+
+    def _clean(s: str) -> str:
+        return s.replace('\\"', '"').replace('\\n', '\n').replace('\\\\', '\\')
+
+    # 1차: 완전한 JSON 파싱
     try:
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         if match:
             data = json.loads(match.group())
-            return {
-                "comment": data.get("comment", raw),
-                "bubbles": data.get("bubbles", {}),
-            }
+            comment_val = data.get("comment", "")
+            if comment_val and isinstance(comment_val, str):
+                return {
+                    "comment": comment_val,
+                    "bubbles": data.get("bubbles", {}),
+                }
     except Exception:
         pass
-    # JSON 파싱 실패 시 regex로 comment 필드만 추출
-    comment_match = re.search(r'"comment"\s*:\s*"((?:[^"\\]|\\.)*)"', raw, re.DOTALL)
-    if comment_match:
-        comment_text = (comment_match.group(1)
-                        .replace('\\"', '"')
-                        .replace('\\n', '\n')
-                        .replace('\\\\', '\\'))
-        return {"comment": comment_text, "bubbles": {}}
-    return {"comment": raw, "bubbles": {}}
+
+    # 2차: "comment": "..." 완전 매칭
+    m = re.search(r'"comment"\s*:\s*"((?:[^"\\]|\\.)*)"', raw, re.DOTALL)
+    if m:
+        return {"comment": _clean(m.group(1)), "bubbles": {}}
+
+    # 3차: JSON이 잘렸을 때 — 닫히지 않은 문자열도 허용 (가능한 만큼 추출)
+    m2 = re.search(r'"comment"\s*:\s*"((?:[^"\\]|\\.)*)', raw, re.DOTALL)
+    if m2:
+        text = _clean(m2.group(1)).strip().rstrip('\\')
+        if len(text) > 20:
+            return {"comment": text, "bubbles": {}}
+
+    # 4차: raw 자체가 JSON이 아닌 순수 텍스트인 경우 그대로 사용
+    if not raw.strip().startswith('{'):
+        return {"comment": raw, "bubbles": {}}
+
+    # 마지막: 어떤 방법으로도 추출 실패 — 빈 문자열 대신 오류 메시지
+    return {"comment": "AI 코멘트를 불러오지 못했어. 다시 시도해줘!", "bubbles": {}}
 
 
 async def stream_chatbot_response(system_prompt: str, messages: list, max_tokens: int = 800):

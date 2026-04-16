@@ -738,27 +738,50 @@ body {
   flex-shrink: 0;
   padding-top: 8px;
 }
-/* 디자이너 패널: chat-window가 panel-body 채우도록 */
+/* 디자이너 패널: panel-body가 스크롤을 전담 */
 #designerPanel .panel-body {
-  display: flex;
-  flex-direction: column;
+  display: block;
   overflow-y: auto;
 }
-/* AI 코멘트 영역 — 항상 최상단 고정, 스크롤 가능 */
+/* AI 코멘트 영역 — 항상 최상단, 전체 내용 표시 */
 .designer-comment-area {
-  flex-shrink: 0;
-  overflow-y: auto;
-  max-height: 55vh;
   font-size: 14px;
+  line-height: 1.65;
 }
 .designer-comment-area .chat-msg {
   max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
-/* 음성 대화창 — ON 시 표시, 최대 220px */
+/* 마크다운 렌더링 스타일 */
+.designer-comment-area .chat-msg p { margin: 6px 0; }
+.designer-comment-area .chat-msg strong { font-weight: 700; }
+.designer-comment-area .chat-msg a { color: #7755aa; text-decoration: underline; }
+.designer-comment-area .chat-msg ul,
+.designer-comment-area .chat-msg ol { margin: 4px 0 4px 18px; }
+.designer-comment-area .chat-msg li { margin-bottom: 3px; }
+/* 수석 디자이너 TTS 듣기 버튼 */
+.designer-tts-btn {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 14px;
+  background: linear-gradient(135deg, #7755aa, #5c40cc);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: opacity 0.15s;
+}
+.designer-tts-btn:hover { opacity: 0.85; }
+/* 음성 대화창 — ON 시 표시 */
 #designerPanel #designerChatWindow {
-  flex-shrink: 0;
-  min-height: 0;
   font-size: 14px;
+  max-height: 220px;
+  overflow-y: auto;
 }
 /* 디자이너 패널 헤더 레이아웃 */
 #designerPanelHeader {
