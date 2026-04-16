@@ -147,7 +147,9 @@
       <span class="designer-emoji">👨‍🎨</span> 수석 디자이너
     </span>
     <div class="designer-mic-wrap">
+      <span class="designer-voice-label">대화 시작</span>
       <button id="voiceMicBtn" class="voice-mic-btn designer-mic-btn" title="대화 시작/종료">ON</button>
+      <span class="designer-voice-progress" id="designerVoiceProgress">대기 중</span>
       <div class="voice-speak-wave designer-wave" id="voiceSpeakWave" style="display:none;">
         <span></span><span></span><span></span><span></span><span></span>
       </div>
@@ -451,41 +453,17 @@
       VoiceEngine.setTextContent(commentHtml);
     }
 
-    // ── Google TTS 자동 재생 (마이크 OFF 상태에서만) ────────────
-    // 패널 열기 클릭으로 AudioContext가 이미 언락됨
-    // → 코멘트 표시 2초 후 자동 재생 (fetch와 타이머를 병렬로 실행)
+    // ── 코디 낭독 자동 시작 (마이크 OFF 상태에서만) ─────────────
+    // 새 코멘트 도착 시 outfit 추적 상태 초기화
+    if (window.resetOutfitState) window.resetOutfitState();
+
+    // 2초 후 WebSocket 경유 문장 단위 낭독 시작
+    // (AudioContext unlock은 패널 열기 클릭 제스처로 이미 수행됨)
     if (!_voiceActive) {
-      let _ttsB64    = null;   // TTS 오디오 도착 시 저장
-      let _timerDone = false;  // 2초 경과 여부
-
-      function _tryPlay() {
-        if (_ttsB64 && _timerDone && window.enqueuePCM) {
-          window.enqueuePCM(_ttsB64);
-          _ttsB64 = null;
-          // TTS 재생 시작 → 자동으로 티키타카 음성 모드 진입
-          if (window.startVoiceAutoMode) window.startVoiceAutoMode();
-        }
-      }
-
-      // TTS 오디오 미리 fetch — 캐시에도 저장 (ON 버튼에서 즉시 재사용)
-      fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: comment })
-      })
-        .then(r => r.json())
-        .then(res => {
-          if (!res.audio) { console.warn('[TTS] audio 없음:', res); return; }
-          _ttsB64 = res.audio;
-          if (typeof chatContext !== 'undefined') chatContext.outfit_tts_b64 = res.audio; // 캐시
-          _tryPlay();
-        })
-        .catch(err => { console.error('[TTS] fetch 오류:', err); });
-
-      // 2초 후 재생 트리거
       setTimeout(() => {
-        _timerDone = true;
-        _tryPlay();
+        if (!_voiceActive && window.startVoiceAutoMode) {
+          window.startVoiceAutoMode();
+        }
       }, 2000);
     }
   }
@@ -718,7 +696,8 @@
     let playCtx = null;
     let nextPlay = 0;
     let playSources = [];
-    let _pendingPCM = null;  // 제스처 전에 도착한 오디오 임시 보관
+    // 제스처 전에 도착한 오디오 큐 — 단일 변수 대신 배열로 전체 보관
+    let _pendingPCMQueue = [];
 
     function _playB64(b64) {
       if (!playCtx || playCtx.state !== 'running') return;
@@ -739,24 +718,26 @@
       src.onended = () => { playSources = playSources.filter(s => s !== src); };
     }
 
+    function _flushQueue() {
+      while (_pendingPCMQueue.length) _playB64(_pendingPCMQueue.shift());
+    }
+
     window.ensurePlayCtx = function () {
       if (!playCtx || playCtx.state === 'closed') {
         try { playCtx = new AudioContext({ sampleRate: OUT_SR }); } catch(e) { return; }
         nextPlay = 0; playSources = [];
       }
       if (playCtx.state === 'suspended') {
-        playCtx.resume().then(() => {
-          if (_pendingPCM) { const p = _pendingPCM; _pendingPCM = null; _playB64(p); }
-        });
-      } else if (playCtx.state === 'running' && _pendingPCM) {
-        const p = _pendingPCM; _pendingPCM = null; _playB64(p);
+        playCtx.resume().then(() => { _flushQueue(); });
+      } else if (playCtx.state === 'running') {
+        _flushQueue();
       }
     };
 
     window.enqueuePCM = function (b64) {
       if (!playCtx || playCtx.state !== 'running') {
-        // AudioContext 미언락 → 보관 후 첫 제스처 때 재생
-        _pendingPCM = b64;
+        // AudioContext 미언락 → 큐에 쌓고 제스처 때 전체 재생
+        _pendingPCMQueue.push(b64);
         window.ensurePlayCtx();  // 이미 제스처가 있었다면 바로 재생됨
         return;
       }
@@ -765,26 +746,24 @@
 
     window.stopAudio = function () {
       for (const s of playSources) { try { s.stop(0); } catch (_) { } }
-      playSources = []; _pendingPCM = null;
+      playSources = []; _pendingPCMQueue = [];
       if (playCtx) nextPlay = playCtx.currentTime;
     };
 
     // ── b64를 클로저로 캡처해서 resume 후 직접 재생 ──────────────────
-    // enqueuePCM과 달리 _pendingPCM을 거치지 않으므로 stopAudio() 영향 없음
     window.forcePlayNow = function (b64) {
       if (!b64) return;
       if (!playCtx || playCtx.state === 'closed') {
         try { playCtx = new AudioContext({ sampleRate: OUT_SR }); nextPlay = 0; playSources = []; }
-        catch (e) { _pendingPCM = b64; return; }
+        catch (e) { _pendingPCMQueue.push(b64); return; }
       }
       if (playCtx.state === 'running') {
         nextPlay = Math.max(nextPlay, playCtx.currentTime);
         _playB64(b64);
       } else {
-        // suspended → resume 후 b64를 클로저로 직접 전달 (변수 참조 없음)
         playCtx.resume()
           .then(function () { nextPlay = Math.max(nextPlay, playCtx.currentTime); _playB64(b64); })
-          .catch(function () { _pendingPCM = b64; }); // 정책 차단 시 폴백
+          .catch(function () { _pendingPCMQueue.push(b64); });
       }
     };
 
@@ -827,6 +806,10 @@
     let _pendingUserDiv = null;       // 사용자 말풍선 미리보기 div
     let _currentAssistantDiv = null;  // 현재 쌓이고 있는 AI 말풍선 (sentence_text 점진적 표시)
 
+    // 코디 낭독 추적 (tikki-takka 이어읽기용)
+    let _outfitStarted  = false;   // startVoiceAutoMode 호출 여부
+    let _outfitReadDone = false;   // outfit_done 수신 여부
+
     // ── 오디오 함수는 위 IIFE에서 window에 노출됨 (enqueuePCM, stopAudio, ensurePlayCtx)
     const enqueuePCM    = window.enqueuePCM;
     const stopAudio     = window.stopAudio;
@@ -844,14 +827,17 @@
         processing: '💭 생각하는 중...',
         speaking: '🔊 말하는 중...',
       };
-      if (statusEl) statusEl.textContent = labels[s] ?? '';
+      const text = labels[s] ?? '';
+      if (statusEl) statusEl.textContent = text;
       if (waveEl) waveEl.style.display = s === 'speaking' ? 'flex' : 'none';
       micBtn.textContent = inVoice ? 'OFF' : 'ON';
       micBtn.classList.toggle('voice-on', inVoice);
       micBtn.classList.toggle('voice-off', !inVoice);
       _voiceActive = inVoice;
       const ds = document.getElementById('designerVoiceStatus');
-      if (ds) ds.textContent = labels[s] ?? '';
+      if (ds) ds.textContent = text;
+      const designerProgress = document.getElementById('designerVoiceProgress');
+      if (designerProgress) designerProgress.textContent = text || '대기 중';
     }
 
     function buildShopCards(text) {
@@ -1009,7 +995,7 @@
     }
 
     // ── WebSocket ──────────────────────────────────────────────────
-    function connectWS(skipGreeting = false) {
+    function connectWS(skipGreeting = false, readFullOutfit = false) {
       const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
       const url = `${scheme}${location.host}/voice/ws`;
       ws = new WebSocket(url);
@@ -1021,6 +1007,7 @@
             context: buildCtx(),
             prev_messages: _savedMessages,
             skip_greeting: skipGreeting,
+            read_full_outfit: readFullOutfit,
           }));
         }
       };
@@ -1121,6 +1108,11 @@
         }
         // done: _currentAssistantDiv 초기화 (response_text 없이 끝나는 경우 대비)
         if (msg.type === 'done') { _currentAssistantDiv = null; }
+        // outfit_done: 코디 낭독 완료 → 이후 ON 버튼은 listening 모드로만
+        if (msg.type === 'outfit_done') {
+          _outfitReadDone = true;
+          _currentAssistantDiv = null;
+        }
         // ping: 무시
       };
 
@@ -1243,19 +1235,26 @@
       if (reconnTimer) { clearTimeout(reconnTimer); reconnTimer = null; }
     }
 
-    // ── 수석 디자이너 TTS 자동 재생 후 티키타카 모드 자동 진입 ──────────
-    // fillDesignerPanel에서 enqueuePCM 직후 호출됨
-    // GREETING 없이 바로 듣기 → 사용자가 말하면 즉시 대화
+    // ── 수석 디자이너 코디 낭독 자동 시작 (WebSocket 경유, 문장 단위 TTS) ──
+    // fillDesignerPanel의 2초 타이머에서 호출됨
+    // read_full_outfit: true → 서버가 코디 코멘트를 sentence_text 단위로 낭독
     function startVoiceAutoMode() {
       if (inVoice) return;  // 이미 ON 상태면 건너뜀
+      _outfitStarted = true;
       inVoice = true;
-      serverState = 'listening';
-      updateUI('listening');
+      serverState = 'speaking';
+      updateUI('speaking');
       setupRecognition();
       startRecognition();
-      connectWS(true);  // skip_greeting: true
+      connectWS(false, true);  // read_full_outfit: true — 서버가 문장 단위 낭독
     }
     window.startVoiceAutoMode = startVoiceAutoMode;
+
+    // 새 코디 코멘트 도착 시 outfit 추적 상태 초기화 (fillDesignerPanel에서 호출)
+    window.resetOutfitState = function () {
+      _outfitStarted  = false;
+      _outfitReadDone = false;
+    };
 
     // ── ON / OFF 토글 ──────────────────────────────────────────────
     micBtn.addEventListener('click', (e) => {
@@ -1277,33 +1276,19 @@
           if (dp && !dp.classList.contains('open')) togglePanel('designerPanel');
         }
 
-        // ④ 코멘트 TTS 재생 + WebSocket 연결 — 동기 구간에서 바로 실행
-        const cachedTts = chatContext.outfit_tts_b64;
-        const comment   = chatContext.outfit_comment;
-        if (cachedTts) {
-          // 미리 받아둔 캐시 → forcePlayNow (클로저 캡처, stopAudio 영향 없음)
+        // ④ WebSocket 연결 — 낭독 상태에 따라 분기
+        // 아직 코디 낭독이 시작 안 됐으면 → read_full_outfit: true (서버 낭독)
+        // 이미 시작/완료 됐으면 → skip_greeting: true (바로 듣기)
+        const hasOutfit = !!(chatContext && chatContext.outfit_comment);
+        if (!_outfitStarted && hasOutfit) {
+          _outfitStarted = true;
           serverState = 'speaking';
           updateUI('speaking');
-          window.forcePlayNow(cachedTts);
-          connectWS(true);  // skip_greeting: true
-        } else if (comment) {
-          // 캐시 미준비 → TTS fetch 후 forcePlayNow
-          serverState = 'speaking';
-          updateUI('speaking');
-          fetch('/api/tts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: comment })
-          })
-            .then(r => r.json())
-            .then(res => { if (res.audio) window.forcePlayNow(res.audio); })
-            .catch(() => {})
-            .finally(() => { connectWS(true); });
+          connectWS(false, true);  // read_full_outfit: true
         } else {
-          // 코멘트 없음 → GREETING 포함 일반 연결
           serverState = 'listening';
           updateUI('listening');
-          connectWS();
+          connectWS(true);  // skip_greeting: true
         }
 
         // ⑤ 날씨·프로필 컨텍스트 업데이트 — 백그라운드 (TTS 재생과 무관)

@@ -258,6 +258,7 @@
     if (!recognition) recognition = initRecog();
     if (!recognition) {
       alert('음성 인식이 지원되지 않아요.\nChrome 또는 Edge 브라우저를 이용해 주세요.');
+      setUI('idle');
       return;
     }
     if (isListening) {
@@ -265,7 +266,12 @@
       setUI('idle');
     } else {
       if (isSpeaking) stopSpeaking();
-      try { recognition.start(); } catch (e) { /* 이미 시작된 경우 무시 */ }
+      try {
+        recognition.start();
+        setUI('listening');
+      } catch (e) {
+        setUI('idle');
+      }
     }
   }
 
@@ -330,21 +336,23 @@
 
   /* ── UI 상태 관리 ────────────────────────────── */
   function setUI(state) {
-    const mic    = document.getElementById('voiceMicBtn');
-    const status = document.getElementById('voiceStatus');
-    const wave   = document.getElementById('voiceSpeakWave');
-    const log    = document.getElementById('voiceChatLog');
+    const mic             = document.getElementById('voiceMicBtn');
+    const status          = document.getElementById('voiceStatus');
+    const designerNotice  = document.getElementById('designerVoiceProgress');
+    const wave            = document.getElementById('voiceSpeakWave');
+    const log             = document.getElementById('voiceChatLog');
     if (!mic) return;
 
     mic.classList.remove('listening', 'thinking', 'speaking');
 
     const labels = {
-      listening: '듣고 있어요... (다시 누르면 중단)',
-      thinking:  '생각 중...',
-      speaking:  '말하는 중... (마이크 눌러 끊기)',
-      idle:      '🎙 마이크를 눌러 말해보세요',
+      listening: '대화 듣는 중...',
+      thinking:  '대화 중...',
+      speaking:  '말하는 중...',
+      idle:      '대화 준비 완료',
     };
     if (state !== 'idle') mic.classList.add(state);
+    if (designerNotice) designerNotice.textContent = labels[state] || labels.idle;
     if (status) status.textContent = labels[state] || labels.idle;
     if (wave)   wave.style.display = state === 'speaking' ? 'flex' : 'none';
 
