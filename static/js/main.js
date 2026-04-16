@@ -31,10 +31,12 @@ function initResizable(panel) {
     const dy = e.clientY - startY;
     let w = startW, h = startH, l = startL, t = startT;
 
-    if (dir.includes('e')) w = Math.max(200, startW + dx);
-    if (dir.includes('s')) h = Math.max(120, startH + dy);
-    if (dir.includes('w')) { w = Math.max(200, startW - dx); l = startL + startW - w; }
-    if (dir.includes('n')) { h = Math.max(120, startH - dy); t = startT + startH - h; }
+    const minW = parseInt(panel.style.minWidth  || panel.dataset.minW || 200);
+    const minH = parseInt(panel.style.minHeight || panel.dataset.minH || 120);
+    if (dir.includes('e')) w = Math.max(minW, startW + dx);
+    if (dir.includes('s')) h = Math.max(minH, startH + dy);
+    if (dir.includes('w')) { w = Math.max(minW, startW - dx); l = startL + startW - w; }
+    if (dir.includes('n')) { h = Math.max(minH, startH - dy); t = startT + startH - h; }
 
     panel.style.width  = w + 'px';
     panel.style.height = h + 'px';

@@ -1139,7 +1139,7 @@ async def api_shopping(request: Request):
 
         # 쇼핑카드 생성
         cards = await asyncio.to_thread(
-            get_shopping_cards, all_items, style_rec, profile or None, []
+            get_shopping_cards, wardrobe_items, style_rec, profile or None, []
         )
         return JSONResponse({"cards": cards})
     except Exception as e:

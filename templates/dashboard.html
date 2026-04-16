@@ -168,8 +168,8 @@
         <p class="empty-msg" style="color:#aaa;font-size:12px;">⏳ AI 스타일링 분석 중...</p>
       </div>
     </div>
-    <!-- 구분선 (음성 대화 시작 시 표시) -->
-    <div id="designerDivider" style="display:none; border-top:1px solid rgba(0,0,0,0.12); margin:6px 0 0;"></div>
+    <!-- 구분선 겸 드래그 핸들 (음성 대화 시작 시 표시) -->
+    <div id="designerDivider" class="designer-drag-divider" style="display:none;" title="드래그해서 높이 조절"></div>
     <!-- ② 음성 대화 로그 — ON 상태에서만 표시 -->
     <div class="chat-window" id="designerChatWindow" style="display:none; margin-top:0;"></div>
     <!-- 음성 상태 표시 -->
@@ -578,6 +578,9 @@
       const color = TYPE_COLOR[card.type] || '#999';
       const icon = TYPE_ICON[card.type] || '•';
       const typeLabel = card.type_label || '';
+      // 아이템 이름: search_query 우선, 없으면 category 사용
+      const itemName = (card.search_query || card.category || '').trim();
+      const shopUrl  = card.search_url || ('https://www.musinsa.com/search/goods?keyword=' + encodeURIComponent(itemName));
 
       html += `
         <div style="margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid #f5e0ec;">
@@ -585,8 +588,19 @@
             <span style="font-size:10px;font-weight:700;color:#fff;background:${color};
                          padding:2px 8px;border-radius:10px;">${icon} ${typeLabel}</span>
             <span style="font-size:10px;color:#bbb;">우선순위 ${card.priority}위</span>
-          </div>
-          <p style="font-size:12px;color:#555;margin:0 0 10px;line-height:1.6;">${card.reason}</p>`;
+          </div>`;
+
+      // 아이템 이름 — 클릭하면 무신사로 이동
+      if (itemName) {
+        html += `
+          <a href="${shopUrl}" target="_blank" rel="noopener"
+             style="display:inline-block;font-size:14px;font-weight:700;color:#c0408a;
+                    margin-bottom:6px;text-decoration:underline;word-break:keep-all;">
+            ${itemName}
+          </a>`;
+      }
+
+      html += `<p style="font-size:12px;color:#555;margin:0 0 10px;line-height:1.6;">${card.reason}</p>`;
 
       if (card.products && card.products.length > 0) {
         html += `<div style="display:flex;gap:8px;flex-wrap:wrap;">`;
@@ -605,16 +619,12 @@
         });
         html += `</div>`;
       } else {
-        const searchQuery = card.search_query || '';
         html += `
-          <a href="${card.search_url}" target="_blank" rel="noopener"
+          <a href="${shopUrl}" target="_blank" rel="noopener"
              style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#fff;
                     background:#3a3a3a;padding:6px 14px;border-radius:18px;text-decoration:none;">
             무신사에서 보기 →
           </a>`;
-        if (searchQuery) {
-          html += `<div style="font-size:10px;color:#bbb;margin-top:4px;">검색어: ${searchQuery}</div>`;
-        }
       }
       html += `</div>`;
     });
@@ -1432,6 +1442,66 @@
       }
     });
 
+  })();
+
+  // ── 수석 디자이너 대화창 드래그 리사이즈 ───────────────────────────
+  (function () {
+    const divider   = document.getElementById('designerDivider');
+    const commentWrap = document.getElementById('designerCommentWrap');
+    if (!divider || !commentWrap) return;
+
+    let dragging = false;
+    let startY   = 0;
+    let startH   = 0;
+
+    divider.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      dragging = true;
+      startY = e.clientY;
+      startH = commentWrap.offsetHeight;
+      divider.classList.add('is-dragging');
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const delta = e.clientY - startY;
+      const newH  = Math.max(30, Math.min(startH + delta, 400));
+      commentWrap.style.height = newH + 'px';
+      commentWrap.style.maxHeight = newH + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      divider.classList.remove('is-dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+
+    // 터치 지원
+    divider.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      dragging = true;
+      startY = t.clientY;
+      startH = commentWrap.offsetHeight;
+      divider.classList.add('is-dragging');
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!dragging) return;
+      const delta = e.touches[0].clientY - startY;
+      const newH  = Math.max(30, Math.min(startH + delta, 400));
+      commentWrap.style.height = newH + 'px';
+      commentWrap.style.maxHeight = newH + 'px';
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+      if (!dragging) return;
+      dragging = false;
+      divider.classList.remove('is-dragging');
+    });
   })();
 </script>
 

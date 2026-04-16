@@ -567,25 +567,25 @@ body {
 
 /* ── 리사이즈 핸들 (8방향) ─────────────────── */
 .resize-handle { position: absolute; z-index: 10; user-select: none; }
-.resize-handle[data-dir="se"] { bottom: 0; right: 0; width: 14px; height: 14px; cursor: se-resize; }
-.resize-handle[data-dir="sw"] { bottom: 0; left:  0; width: 14px; height: 14px; cursor: sw-resize; }
-.resize-handle[data-dir="ne"] { top: 0;    right: 0; width: 14px; height: 14px; cursor: ne-resize; }
-.resize-handle[data-dir="nw"] { top: 0;    left:  0; width: 14px; height: 14px; cursor: nw-resize; }
-.resize-handle[data-dir="n"]  { top: 0;    left: 14px; right: 14px; height: 5px; cursor: n-resize; }
-.resize-handle[data-dir="s"]  { bottom: 0; left: 14px; right: 14px; height: 5px; cursor: s-resize; }
-.resize-handle[data-dir="e"]  { right: 0;  top: 14px; bottom: 14px; width: 5px; cursor: e-resize; }
-.resize-handle[data-dir="w"]  { left:  0;  top: 14px; bottom: 14px; width: 5px; cursor: w-resize; }
+.resize-handle[data-dir="se"] { bottom: 0; right: 0; width: 18px; height: 18px; cursor: se-resize; }
+.resize-handle[data-dir="sw"] { bottom: 0; left:  0; width: 18px; height: 18px; cursor: sw-resize; }
+.resize-handle[data-dir="ne"] { top: 0;    right: 0; width: 18px; height: 18px; cursor: ne-resize; }
+.resize-handle[data-dir="nw"] { top: 0;    left:  0; width: 18px; height: 18px; cursor: nw-resize; }
+.resize-handle[data-dir="n"]  { top: 0;    left: 18px; right: 18px; height: 6px; cursor: n-resize; }
+.resize-handle[data-dir="s"]  { bottom: 0; left: 18px; right: 18px; height: 6px; cursor: s-resize; }
+.resize-handle[data-dir="e"]  { right: 0;  top: 18px; bottom: 18px; width: 6px; cursor: e-resize; }
+.resize-handle[data-dir="w"]  { left:  0;  top: 18px; bottom: 18px; width: 6px; cursor: w-resize; }
 .resize-handle[data-dir="se"]::after {
   content: '⤡';
   position: absolute; bottom: 1px; right: 2px;
-  font-size: 11px; color: rgba(255,255,255,0.4); line-height: 1;
+  font-size: 12px; color: rgba(0,0,0,0.25); line-height: 1;
 }
 
 /* 패널 위치 */
 #weatherPanel  { top: 64px; left: 88px; width: 260px; }
 #stylePanel    { top: 64px; left: 88px; width: 280px; }
 #itemPanel     { top: 64px; left: 88px; width: 300px; }
-#designerPanel { top: 64px; left: 88px; width: 460px !important; min-width: 320px; height: 560px !important; min-height: 300px; }
+#designerPanel { top: 64px; left: 88px; width: 460px; min-width: 280px; height: 560px; min-height: 260px; }
 #shoppingPanel { top: 64px; left: 88px; width: 300px; }
 #calendarPanel { top: 64px; left: 88px; width: 280px; min-height: 200px; }
 #calendarPanel .panel-header {
@@ -801,10 +801,56 @@ body {
   transition: opacity 0.15s;
 }
 .designer-tts-btn:hover { opacity: 0.85; }
-/* 음성 대화창 — ON 시 표시 */
+/* 수석 디자이너 패널 내부 레이아웃 — flex 컬럼으로 대화창 가변 높이 */
+#designerPanel .panel-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px 14px 8px;
+}
+#designerPanel .designer-toggle-btn {
+  flex-shrink: 0;
+}
+#designerPanel .designer-comment-wrap {
+  flex-shrink: 0;
+  overflow-y: auto;
+  min-height: 30px;
+}
+#designerPanel #designerVoiceStatus {
+  flex-shrink: 0;
+}
+
+/* 드래그 구분선 */
+.designer-drag-divider {
+  flex-shrink: 0;
+  height: 10px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2px -14px; /* 패널 좌우 패딩 상쇄해서 풀너비 */
+  transition: background 0.15s;
+}
+.designer-drag-divider::after {
+  content: '';
+  width: 44px;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(0,0,0,0.18);
+  transition: background 0.15s, width 0.15s;
+}
+.designer-drag-divider:hover::after,
+.designer-drag-divider.is-dragging::after {
+  background: rgba(119,85,170,0.55);
+  width: 64px;
+}
+
+/* 음성 대화창 — ON 시 남은 공간 채움 */
 #designerPanel #designerChatWindow {
   font-size: 14px;
-  max-height: 220px;
+  flex: 1;
+  min-height: 60px;
+  max-height: none;
   overflow-y: auto;
 }
 /* 디자이너 패널 헤더 레이아웃 */
