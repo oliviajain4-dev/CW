@@ -326,9 +326,17 @@
     el.innerHTML = html;
   }
 
-  function fillStylePanel(style_rec, wardrobe_matches) {
+  function makeMusinsaLink(label) {
+    if (!label) return '#';
+    return 'https://www.musinsa.com/search/goods?keyword=' + encodeURIComponent(label);
+  }
+
+  function fillStylePanel(style_rec, wardrobe_matches, shopping_fallback = []) {
     const el = document.getElementById('styleBody');
-    const recItems = style_rec.recommended_items.map(i => `<li class="item-good">${i}</li>`).join('');
+    const recItems = style_rec.recommended_items.map(i => `
+      <li class="item-good">
+        <a href="${makeMusinsaLink(i)}" target="_blank" rel="noopener">${i}</a>
+      </li>`).join('');
     const avoidItems = style_rec.avoid_items.map(i => `<li class="item-bad">${i}</li>`).join('');
 
     // 옷장 매칭 이미지 섹션
@@ -345,7 +353,9 @@
             <img src="${item.image_url}" alt="${item.item_type}"
                  style="width:58px;height:58px;object-fit:cover;border-radius:8px;border:1.5px solid #f0c0d8;display:block;"
                  onerror="this.style.display='none'">
-            <div style="font-size:9px;color:#bbb;margin-top:3px;max-width:58px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${item.item_type}</div>
+            <div style="font-size:9px;color:#bbb;margin-top:3px;max-width:58px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">
+              <a href="${makeMusinsaLink(item.item_type)}" target="_blank" rel="noopener" style="color:#333;text-decoration:none;">${item.item_type}</a>
+            </div>
           </div>`).join('');
         wardrobeHtml = `
           <div style="font-size:12px;font-weight:700;color:#9966cc;margin-bottom:6px;">👗 내 옷장 매칭</div>
@@ -353,8 +363,22 @@
       }
     }
 
+    let fallbackHtml = '';
+    if (shopping_fallback && shopping_fallback.length) {
+      const links = shopping_fallback.map(link => `
+        <a href="${link.search_url}" target="_blank" rel="noopener"
+           style="display:inline-block;margin-right:8px;margin-bottom:8px;padding:6px 10px;
+                  font-size:11px;color:#fff;background:#6d5ce6;border-radius:14px;text-decoration:none;">
+          ${link.category} 쇼핑 →
+        </a>`).join('');
+      fallbackHtml = `
+        <div style="font-size:12px;font-weight:700;color:#ff5c8a;margin-bottom:8px;">🛍️ 내 옷장에 해당 카테고리가 없어요. 무신사에서 찾아보세요.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">${links}</div>`;
+    }
+
     el.innerHTML = `
       ${wardrobeHtml}
+      ${fallbackHtml}
       <div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:6px;">✅ 추천 아이템</div>
       <ul class="item-list" style="margin-bottom:12px;">${recItems}</ul>
       <div style="font-size:12px;font-weight:700;color:#e05080;margin-bottom:6px;">❌ 피할 아이템</div>
@@ -363,6 +387,7 @@
       <div class="detail-item"><span class="detail-icon">💇</span><div><strong>헤어</strong><p>${style_rec.hair_rec}</p></div></div>
       <div class="detail-item"><span class="detail-icon">👟</span><div><strong>신발</strong><p>${style_rec.shoe_rec}</p></div></div>
       <div class="detail-item"><span class="detail-icon">👜</span><div><strong>악세서리</strong><p>${style_rec.acc_rec}</p></div></div>`;
+    normalizeLinks(el);
   }
 
   // ── 링크 정규화 (target=_blank, 무신사 텍스트 보정) — 전역 스코프 ──
@@ -408,6 +433,12 @@
 
   // ── 수석 디자이너 패널 — 코멘트를 첫 번째 대화 버블로 ──────────
   function fillDesignerPanel(comment) {
+    if (comment === undefined || comment === null) return;
+    if (typeof comment !== 'string') {
+      try { comment = JSON.stringify(comment, null, 2); }
+      catch (e) { comment = String(comment); }
+    }
+
     // AI 코멘트는 designerCommentArea에 표시 (항상 최상단 고정)
     const area = document.getElementById('designerCommentArea');
     if (!area) return;
@@ -443,6 +474,9 @@
     div.innerHTML = commentHtml;
     area.appendChild(div);
     normalizeLinks(div);
+    if (div.querySelectorAll('a[target="_blank"]').length === 0) {
+      normalizeLinks(div);
+    }
     area.scrollTop = 0;
 
     // 오늘의 코디 코멘트 저장 — 마이크 ON 시 GREETING에서 참조
@@ -455,6 +489,9 @@
 
     // 새 코멘트 도착 시 outfit 추적 상태 초기화 — ON 버튼 누르면 처음부터 낭독
     if (window.resetOutfitState) window.resetOutfitState();
+
+    // voice가 ON이고 아직 낭독 시작 전이면 → 지금 바로 낭독 시작 (ON 이후 코멘트 늦게 도착한 경우 포함)
+    if (window.requestOutfitRead) window.requestOutfitRead(comment);
   }
 
   // ── 쇼핑 패널 — 별도 로드 ───────────────────────────────────────
@@ -589,9 +626,9 @@
     .then(r => r.json())
     .then(data => {
       if (data.error) return;
-      const { weather, style_rec, layering, wardrobe_matches } = data;
+      const { weather, style_rec, layering, wardrobe_matches, shopping_fallback } = data;
       fillWeatherPanel(weather, style_rec, layering);
-      fillStylePanel(style_rec, wardrobe_matches);
+      fillStylePanel(style_rec, wardrobe_matches, shopping_fallback);
       chatContext.weather_label = style_rec.condition_label;
       chatContext.recommended_items = style_rec.recommended_items.join(', ');
       chatContext.weather = weather || {};
@@ -944,7 +981,11 @@
     // normalizeLinks는 전역 스코프에 정의됨 (script block 1)
 
     function addLog(text, role) {
-      if (!text) return;
+      if (text === undefined || text === null) return;
+      if (typeof text !== 'string') {
+        try { text = JSON.stringify(text, null, 2); }
+        catch (e) { text = String(text); }
+      }
       // _savedMessages 누적 (IIFE 밖 변수)
       _savedMessages.push({ role: (role === 'assistant' ? 'assistant' : 'user'), content: text });
       if (_savedMessages.length > 20) _savedMessages = _savedMessages.slice(-20);
@@ -1057,6 +1098,8 @@
             // 처리 중 임시 말풍선 제거
             const thinkDiv = document.getElementById('_voiceThinkDiv');
             if (thinkDiv) thinkDiv.remove();
+            // speaking 중에도 마이크 켜기 → barge-in 감지 가능
+            if (!_recognizing) startRecognition();
           }
         } else if (msg.type === 'audio_chunk') {
           enqueuePCM(msg.data);
@@ -1176,14 +1219,17 @@
 
       // 말 시작 감지 → barge-in (TTS 재생 중이거나 오디오 큐에 남아있을 때)
       recognition.onspeechstart = () => {
-        _cancelOutfitResume();  // 사용자가 말하면 이어읽기 예약 취소
         if (serverState === 'speaking' || playSources.length > 0) {
+          // AI가 말하는 도중 끼어들기 → 이어읽기 타이머 취소 + TTS 중단
+          _cancelOutfitResume();
           stopAudio();
           if (ws?.readyState === WebSocket.OPEN)
             ws.send(JSON.stringify({ type: 'barge_in' }));
           serverState = 'listening';
           updateUI('listening');
         }
+        // listening 상태(2초 대기 중)에서 onspeechstart가 발동해도 타이머는 건드리지 않음
+        // → false positive(에코/노이즈)로 이어읽기 타이머가 취소되는 버그 방지
         if (_pendingUserDiv) return; // 이미 표시 중
         // 사용자 말풍선 미리 표시 (입력 중...)
         _pendingUserDiv = document.createElement('div');
@@ -1219,6 +1265,8 @@
       recognition.onresult = (e) => {
         const text = e.results[0][0].transcript.trim();
         if (!text) return;
+        // 진짜 발화 확인됨 → 이어읽기 타이머 취소 (서버가 새 outfit_continue 보내줄 것)
+        _cancelOutfitResume();
         // 미리 표시한 말풍선 업데이트 or 새로 추가
         if (_pendingUserDiv) {
           _pendingUserDiv.textContent = text;
@@ -1244,14 +1292,14 @@
           _pendingUserDiv.remove();
           _pendingUserDiv = null;
         }
-        if (inVoice && serverState === 'listening') startRecognition();
+        if (inVoice && (serverState === 'listening' || serverState === 'speaking')) startRecognition();
       };
 
       // no-speech 오류: 재시작 / 그 외: 무시
       recognition.onerror = (e) => {
         _recognizing = false;
         if (_pendingUserDiv) { _pendingUserDiv.remove(); _pendingUserDiv = null; }
-        if (e.error === 'no-speech' && inVoice && serverState === 'listening')
+        if (e.error === 'no-speech' && inVoice && (serverState === 'listening' || serverState === 'speaking'))
           startRecognition();
       };
     }
@@ -1282,6 +1330,21 @@
     window.resetOutfitState = function () {
       _outfitStarted  = false;
       _outfitReadDone = false;
+    };
+
+    // fillDesignerPanel에서 호출 — voice ON 상태에서 코멘트가 늦게 도착했을 때 자동 낭독 시작
+    window.requestOutfitRead = function (comment) {
+      if (!inVoice || _outfitStarted || !comment) return;
+      _outfitStarted = true;
+      serverState = 'speaking';
+      updateUI('speaking');
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        // WebSocket 이미 열려있으면 start_outfit 메시지로 낭독 시작 요청
+        ws.send(JSON.stringify({ type: 'start_outfit', outfit_comment: comment }));
+      } else {
+        // WebSocket 없으면 새로 연결 (read_full_outfit: true)
+        connectWS(false, true);
+      }
     };
 
     // ── ON / OFF 토글 ──────────────────────────────────────────────

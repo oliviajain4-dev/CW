@@ -31,6 +31,7 @@ import json
 import os
 import time
 import uuid
+import urllib.parse
 from datetime import datetime
 from typing import Optional
 
@@ -93,6 +94,27 @@ def img_url_filter(image_path) -> str:
 
 
 templates.env.filters["img_url"] = img_url_filter
+
+
+def make_musinsa_search_url(query: str) -> str:
+    if not query:
+        return "https://www.musinsa.com/search/goods"
+    return "https://www.musinsa.com/search/goods?keyword=" + urllib.parse.quote(query)
+
+
+def make_shopping_query(category: str, style_pref: str = "캐주얼", gender: str = "여성") -> str:
+    if not category:
+        return f"{gender} {style_pref}".strip()
+    label_map = {
+        "상의": "상의",
+        "하의": "하의",
+        "아우터": "아우터",
+        "원피스": "원피스",
+        "신발": "신발",
+        "악세서리": "악세서리",
+    }
+    label = label_map.get(category, category)
+    return f"{gender} {style_pref} {label}".strip()
 
 # 음성 파이프라인 라우터 통합
 app.include_router(voice_router)
@@ -915,14 +937,14 @@ async def api_recommend(request: Request, quick: bool = False):
 
         ph = "%s" if is_postgres() else "?"
         with get_db() as conn:
-            all_items = fetchall(
+            user_items = fetchall(
                 conn,
                 f"SELECT id, category, item_type, warmth, texture, image_path "
-                f"FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
+                f"FROM wardrobe_items WHERE user_id={ph} ORDER BY created_at DESC",
                 (user.id,)
             )
 
-        cache_key      = f"{user.id},{nx},{ny},{tpo},{sensitivity},{len(all_items)}"
+        cache_key      = f"{user.id},{nx},{ny},{tpo},{sensitivity},{len(user_items)}"
         cache_key_full = cache_key + ",full"
         cached_full    = _recommend_cache.get(cache_key_full)
         if cached_full and time.time() - cached_full["ts"] < _CACHE_TTL:
@@ -946,7 +968,7 @@ async def api_recommend(request: Request, quick: bool = False):
         needs_outer = temp_range in _NEEDS_OUTER
 
         wardrobe_matches = {"상의": [], "하의": [], "아우터": []}
-        for item in all_items:
+        for item in user_items:
             cat      = item.get("category")
             img_path = item.get("image_path", "")
             if cat not in wardrobe_matches or not img_path:
@@ -961,12 +983,27 @@ async def api_recommend(request: Request, quick: bool = False):
                 wardrobe_matches["상의"].append(entry)
             elif cat == "하의":
                 wardrobe_matches["하의"].append(entry)
+
         for cat in wardrobe_matches:
             wardrobe_matches[cat] = wardrobe_matches[cat][:3]
+
+        categories_needed = ["상의", "하의"]
+        if needs_outer:
+            categories_needed.append("아우터")
+        shopping_fallback = []
+        for cat in categories_needed:
+            if not wardrobe_matches.get(cat):
+                query = make_shopping_query(cat, style_pref, profile.get("gender", "여성"))
+                shopping_fallback.append({
+                    "category": cat,
+                    "search_query": query,
+                    "search_url": make_musinsa_search_url(query),
+                })
 
         quick_result = {
             "weather": weather, "style_rec": style_rec, "layering": layering,
             "wardrobe_matches": wardrobe_matches,
+            "shopping_fallback": shopping_fallback,
         }
         _recommend_cache[cache_key] = {"data": quick_result, "ts": time.time()}
 
@@ -978,7 +1015,7 @@ async def api_recommend(request: Request, quick: bool = False):
         wardrobe_for_ai = [
             {"category": it["category"], "item_type": it["item_type"],
              "warmth": it.get("warmth", 0), "texture": it.get("texture", "미상")}
-            for it in all_items
+            for it in user_items
         ]
 
         # 캘린더 일정 가져오기 (구글 로그인 시에만)
@@ -1071,12 +1108,18 @@ async def api_shopping(request: Request):
 
         ph = "%s" if is_postgres() else "?"
         with get_db() as conn:
-            all_items = fetchall(
+            wardrobe_items = fetchall(
                 conn,
                 f"SELECT category, item_type, warmth, texture FROM wardrobe_items "
-                f"WHERE (user_id={ph} OR user_id IS NULL) ORDER BY created_at DESC",
+                f"WHERE user_id={ph} ORDER BY created_at DESC",
                 (user.id,)
             )
+            if not wardrobe_items:
+                wardrobe_items = fetchall(
+                    conn,
+                    "SELECT category, item_type, warmth, texture FROM wardrobe_items "
+                    "WHERE user_id IS NULL ORDER BY created_at DESC"
+                )
 
         # 날씨 캐시 활용 (recommend API가 먼저 호출된 경우 재사용)
         cache_key    = f"{user.id},{nx},{ny}"

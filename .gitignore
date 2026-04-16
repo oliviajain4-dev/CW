@@ -43,3 +43,5 @@ NotoSansKR.ttf
 # Claude 메모리
 .claude/
 
+# Google OAuth 클라이언트 시크릿 (절대 커밋 금지)
+google_client_secret.json

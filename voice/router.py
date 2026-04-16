@@ -199,6 +199,7 @@ async def voice_ws(websocket: WebSocket):
     state              = "idle"
     current_task: Optional[asyncio.Task] = None
     ping_task:    Optional[asyncio.Task] = None
+    resume_task:  Optional[asyncio.Task] = None   # outfit 자동 재개 타이머
     interrupted        = False
 
     messages:          list = []
@@ -234,8 +235,11 @@ async def voice_ws(websocket: WebSocket):
                 pass
 
     async def _cancel_current() -> None:
-        nonlocal current_task, interrupted
+        nonlocal current_task, resume_task, interrupted
         interrupted = True
+        # 자동 재개 타이머도 취소
+        await _cancel_task(resume_task)
+        resume_task = None
         # 중단 시 스트리밍 중이던 내용 저장 (barge-in 이후 자연스러운 대화 재개용)
         if session["partial_text"]:
             session["interrupted_ctx"] = session["partial_text"]
@@ -472,7 +476,7 @@ async def voice_ws(websocket: WebSocket):
 
     # ── 사용자 발화 처리 (barge-in → 현재 섹션 이어서) ─────────────────
     async def process_user_text(user_text: str) -> None:
-        nonlocal interrupted
+        nonlocal interrupted, resume_task, current_task
         interrupted = False
         interrupted_ctx  = session.get("interrupted_ctx",  ""); session["interrupted_ctx"]  = ""
         spoken_outfit    = session.get("spoken_outfit",    ""); session["spoken_outfit"]    = ""
@@ -492,10 +496,18 @@ async def voice_ws(websocket: WebSocket):
                               spoken_outfit=spoken_outfit,
                               remaining_outfit=remaining_outfit)
 
-        # 코디 소개 중 끼어들었고 아직 읽을 문장이 남아있으면 outfit_continue 신호
-        # 재개 타이밍은 클라이언트가 오디오 완료 + 2초 정적 후 resume_outfit으로 전송
+        # 코디 소개 중 끼어들었고 아직 읽을 문장이 남아있으면 outfit_continue 신호 + 서버 자동 재개
         if session.get("outfit_sentences") and not interrupted:
             await _send({"type": "outfit_continue"})
+            # 클라이언트가 resume_outfit을 보내지 않아도 3초 후 서버가 직접 재개
+            # (클라이언트 타이머가 에코/노이즈로 취소되는 상황 대비)
+            await _cancel_task(resume_task)
+            async def _auto_resume():
+                nonlocal current_task
+                await asyncio.sleep(3)
+                if session.get("outfit_sentences") and not interrupted:
+                    current_task = asyncio.create_task(read_outfit_verbatim(resume=True))
+            resume_task = asyncio.create_task(_auto_resume())
 
     # ── 메시지 루프 ────────────────────────────────────────────────────
     try:
@@ -535,6 +547,16 @@ async def voice_ws(websocket: WebSocket):
                     pending_sections[:] = ["GREETING"]
                     current_task = asyncio.create_task(process_section("GREETING"))
 
+            # 2-a. 코디 코멘트 로딩 완료 후 낭독 시작 (ON 누른 후 코멘트가 늦게 도착한 경우)
+            elif msg_type == "start_outfit":
+                outfit_comment = msg.get("outfit_comment", "").strip()
+                if outfit_comment:
+                    context["outfit_comment"] = outfit_comment
+                    await _cancel_current()
+                    session["outfit_sentences"]  = []
+                    session["outfit_sent_count"] = 0
+                    current_task = asyncio.create_task(read_outfit_verbatim())
+
             # 2. 사용자 음성 텍스트 수신 (Web Speech API 변환 결과)
             elif msg_type == "user_text":
                 text = msg.get("text", "").strip()
@@ -557,8 +579,11 @@ async def voice_ws(websocket: WebSocket):
                 await _cancel_current()
                 await _set_state("listening")
 
-            # 4. 코디 이어읽기 수동 재개 (클라이언트 fallback)
+            # 4. 코디 이어읽기 수동 재개 (클라이언트 신호 또는 서버 자동 타이머 대신 클라이언트가 먼저 옴)
             elif msg_type == "resume_outfit":
+                # 서버 자동 재개 타이머가 있으면 취소 (클라이언트가 먼저 보낸 경우)
+                await _cancel_task(resume_task)
+                resume_task = None
                 sents = session.get("outfit_sentences", [])
                 cnt   = session.get("outfit_sent_count", 0)
                 if sents and cnt < len(sents):
