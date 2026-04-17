@@ -144,6 +144,7 @@
 
 <!-- ④ 수석 디자이너 패널 -->
 <div class="panel" id="designerPanel">
+  <!-- 헤더: 수석 디자이너 타이틀 + ON/OFF + 닫기 -->
   <div class="panel-header" id="designerPanelHeader">
     <span class="designer-panel-title">
       <span class="designer-emoji">👨‍🎨</span> 수석 디자이너
@@ -158,81 +159,81 @@
     </div>
     <button class="panel-close" onclick="closePanel('designerPanel')">✕</button>
   </div>
-  <div class="panel-body" id="designerBody">
-    <!-- ① AI 수석 디자이너 코멘트 — 접기/펼치기 -->
-    <button class="designer-toggle-btn" id="designerToggleBtn" onclick="toggleDesignerComment()">
-      <span class="dtb-icon">✦</span>
-      <span class="dtb-label">오늘의 스타일링 코멘트</span>
-      <span class="dtb-chevron">▾</span>
-    </button>
-    <div class="designer-comment-wrap" id="designerCommentWrap">
-      <div id="designerCommentArea" class="designer-comment-area">
-        <p class="empty-msg" style="color:#aaa;font-size:12px;">⏳ AI 스타일링 분석 중...</p>
-      </div>
-    </div>
-    <!-- 구분선 겸 드래그 핸들 (음성 대화 시작 시 표시) -->
-    <div id="designerDivider" class="designer-drag-divider" style="display:none;" title="드래그해서 높이 조절"></div>
-    <!-- ② 음성 대화 로그 — ON 상태에서만 표시 -->
-    <div class="chat-window" id="designerChatWindow" style="display:none; margin-top:0;"></div>
-    <!-- 음성 상태 표시 -->
-    <div id="designerVoiceStatus" style="
-  font-size:16px;font-weight:700;color:#7755aa;text-align:center;
-  padding:6px 12px;min-height:0;flex-shrink:0;
-  background:rgba(119,85,170,0.07);border-radius:10px;
-  margin:4px 0;letter-spacing:0.02em;
-  transition:all 0.2s;
-"></div>
 
-    <!-- ③ 피드백 & 성장 — 코멘트 로드 후 표시 -->
-    <div id="feedbackSection" style="display:none; margin-top:10px; padding:10px 12px;
-         background:rgba(167,139,250,0.07); border-radius:12px; border:1px solid rgba(167,139,250,0.2);">
-      <div style="font-size:11px; color:#9b8ec4; font-weight:600; margin-bottom:8px; letter-spacing:0.03em;">
-        오늘 추천 어땠어요?
+  <!-- 바디: 좌(코멘트) + 세로구분선 + 우(티키타카) — 가로 2컬럼 -->
+  <div class="panel-body" id="designerBody">
+
+    <!-- ── 좌측: 코멘트 + 피드백 ── -->
+    <div class="designer-left-col">
+      <button class="designer-toggle-btn" id="designerToggleBtn" onclick="toggleDesignerComment()">
+        <span class="dtb-icon">✦</span>
+        <span class="dtb-label">오늘의 스타일링 코멘트</span>
+        <span class="dtb-chevron">▾</span>
+      </button>
+      <div class="designer-comment-wrap" id="designerCommentWrap">
+        <div id="designerCommentArea" class="designer-comment-area">
+          <p class="empty-msg" style="color:#aaa;font-size:12px;">⏳ AI 스타일링 분석 중...</p>
+        </div>
       </div>
-      <!-- 좋아요 / 싫어요 -->
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
-        <button id="feedbackLike" onclick="submitFeedback(5)"
-          style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #a78bfa;
-                 background:#fff; color:#7c3aed; font-size:16px; cursor:pointer;
-                 transition:all 0.15s;" title="좋아요">
-          👍 좋아요
+      <!-- 피드백 & 성장 -->
+      <div id="feedbackSection" style="display:none; margin-top:10px; padding:10px 12px;
+           background:rgba(167,139,250,0.07); border-radius:12px; border:1px solid rgba(167,139,250,0.2);">
+        <div style="font-size:11px; color:#9b8ec4; font-weight:600; margin-bottom:8px;">오늘 추천 어땠어요?</div>
+        <div style="display:flex; gap:8px; margin-bottom:8px;">
+          <button id="feedbackLike" onclick="selectFeedback(5)"
+            style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #a78bfa;
+                   background:#fff; color:#7c3aed; font-size:16px; cursor:pointer; transition:all 0.15s;">
+            👍 좋아요
+          </button>
+          <button id="feedbackDislike" onclick="selectFeedback(1)"
+            style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #f9a8d4;
+                   background:#fff; color:#db2777; font-size:16px; cursor:pointer; transition:all 0.15s;">
+            👎 별로예요
+          </button>
+        </div>
+        <label style="display:flex; align-items:center; gap:6px; font-size:15px; color:#6b7280; cursor:pointer; margin-bottom:6px;">
+          <input type="checkbox" id="feedbackWorn" style="width:16px; height:16px; accent-color:#a78bfa;">
+          오늘 실제로 이 코디 입었어요
+        </label>
+        <div id="feedbackTextWrap" style="display:none; margin-top:4px;">
+          <textarea id="feedbackText" placeholder="한 마디 남겨줘요 (선택)" rows="2"
+            style="width:100%; border-radius:8px; border:1px solid #e5e7eb; padding:6px 8px;
+                   font-size:15px; resize:none; box-sizing:border-box; color:#374151;"></textarea>
+        </div>
+        <button onclick="toggleFeedbackText()"
+          style="font-size:15px; color:#a78bfa; background:none; border:none; cursor:pointer; padding:0; margin-top:2px;" id="feedbackTextToggle">
+          ✎ 메모 남기기
         </button>
-        <button id="feedbackDislike" onclick="submitFeedback(1)"
-          style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #f9a8d4;
-                 background:#fff; color:#db2777; font-size:16px; cursor:pointer;
-                 transition:all 0.15s;" title="별로예요">
-          👎 별로예요
-        </button>
-      </div>
-      <!-- 실제 착용 체크 -->
-      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#6b7280;
-                    cursor:pointer; margin-bottom:6px;">
-        <input type="checkbox" id="feedbackWorn" style="width:14px; height:14px; accent-color:#a78bfa;">
-        오늘 실제로 이 코디 입었어요
-      </label>
-      <!-- 자유 피드백 (접기/펼치기) -->
-      <div id="feedbackTextWrap" style="display:none; margin-top:4px;">
-        <textarea id="feedbackText" placeholder="한 마디 남겨줘요 (선택)" rows="2"
-          style="width:100%; border-radius:8px; border:1px solid #e5e7eb; padding:6px 8px;
-                 font-size:12px; resize:none; box-sizing:border-box; color:#374151;">
-        </textarea>
-        <button onclick="submitFeedbackWithText()"
-          style="margin-top:4px; width:100%; padding:6px; border-radius:8px;
-                 background:#a78bfa; color:#fff; border:none; font-size:12px; cursor:pointer;">
+        <button onclick="submitAll()"
+          style="margin-top:8px; width:100%; padding:8px; border-radius:8px;
+                 background:#a78bfa; color:#fff; border:none; font-size:15px; font-weight:600; cursor:pointer;">
           전송
         </button>
-      </div>
-      <button onclick="toggleFeedbackText()"
-        style="font-size:10px; color:#a78bfa; background:none; border:none; cursor:pointer;
-               padding:0; margin-top:2px;" id="feedbackTextToggle">
-        ✎ 메모 남기기
-      </button>
-      <!-- 피드백 완료 메시지 -->
-      <div id="feedbackDone" style="display:none; text-align:center; color:#7c3aed;
-           font-size:12px; padding:4px 0;">
-        ✓ 피드백 저장됐어요! 다음 추천에 반영할게요 💜
+        <div id="feedbackDone" style="display:none; text-align:center; color:#7c3aed; font-size:14px; padding:4px 0;">
+          ✓ 피드백 저장됐어요! 다음 추천에 반영할게요 💜
+        </div>
       </div>
     </div>
+
+    <!-- ── 세로 구분선 (ON 시 표시) ── -->
+    <div class="designer-col-divider" id="designerColDivider"></div>
+
+    <!-- ── 우측: 티키타카 채팅 (ON 시 표시) ── -->
+    <div class="designer-right-col" id="designerRightCol">
+      <!-- 우측 상단: 타이틀 + 상태 -->
+      <div class="designer-right-header">
+        <span style="font-size:15px;">🎙</span>
+        <span style="font-size:13px; font-weight:700; color:#1a1a2e;">티키타카</span>
+        <div id="designerVoiceStatus" style="
+          font-size:12px; font-weight:700; color:#7755aa;
+          padding:2px 8px; flex:1; text-align:right;
+          letter-spacing:0.02em; transition:all 0.2s;
+        "></div>
+      </div>
+      <!-- 대화 로그 -->
+      <div class="chat-window" id="designerChatWindow" style="flex:1; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:6px;"></div>
+    </div>
+
   </div>
   <div class="resize-handle" data-dir="n"></div>
   <div class="resize-handle" data-dir="ne"></div>
@@ -711,9 +712,25 @@
     .then(r => r.json())
     .then(data => {
       if (data.error) {
-        // designerBody 전체 교체 금지 — designerChatWindow 파괴됨
         const area = document.getElementById('designerCommentArea');
-        if (area) area.innerHTML = `<p class="empty-msg">연결 오류: ${data.error}</p>`;
+        if (area) {
+          const msg = String(data.error || '').toLowerCase();
+          const type = String(data.error_type || '').toLowerCase();
+          let friendly = '⚠️ AI 스타일링을 불러오지 못했어요. 잠시 후 다시 시도해주세요.';
+
+          if (type === 'runtimeerror' && msg.includes('claude_api_key')) {
+            friendly = '⚠️ AI API 키가 설정되지 않았습니다. 관리자에게 문의해주세요.';
+          } else if (msg.includes('your credit balance is too low') || msg.includes('credit') || msg.includes('402')) {
+            friendly = '⚠️ AI 크레딧이 부족해요. Anthropic 결제 페이지에서 잔액을 확인해주세요.';
+          } else if (msg.includes('billing') || msg.includes('payment required') || msg.includes('api key') || msg.includes('unauthorized') || msg.includes('auth')) {
+            friendly = '⚠️ AI 접근 권한/결제 정보에 문제가 있어요. 관리자에게 문의해주세요.';
+          } else if (msg.includes('rate') || msg.includes('429')) {
+            friendly = '⚠️ 요청이 너무 많아요. 잠시 후 다시 시도해주세요.';
+          }
+
+          console.error('recommend error: ', data.error_type, data.error);
+          area.innerHTML = `<p class="empty-msg" style="color:#b45309;">${friendly}</p>`;
+        }
         return;
       }
       if (data.comment) fillDesignerPanel(data.comment);
@@ -1180,17 +1197,12 @@
         } else if (msg.type === 'audio_chunk') {
           enqueuePCM(msg.data);
         } else if (msg.type === 'sentence_text') {
+          // 아웃핏 낭독 중(outfit_done 전)이면 채팅창에 표시 안 함
+          // → 이미 수석 디자이너 코멘트 패널에 전체 텍스트가 있음
+          if (_outfitStarted && !_outfitReadDone) { /* skip */ } else {
           // 문장 단위로 AI 말풍선에 점진적으로 텍스트 추가
           const win = document.getElementById('designerChatWindow');
           if (win) {
-            if (win.style.display === 'none') {
-              win.style.display = 'flex';
-              win.style.flexDirection = 'column';
-              win.style.gap = '6px';
-              win.style.overflowY = 'auto';
-              const hr = document.getElementById('designerDivider');
-              if (hr) hr.style.display = 'block';
-            }
             if (!_currentAssistantDiv) {
               _currentAssistantDiv = document.createElement('div');
               _currentAssistantDiv.className = 'chat-msg assistant';
@@ -1202,7 +1214,10 @@
             _currentAssistantDiv.appendChild(span);
             win.scrollTop = win.scrollHeight;
           }
+          }
         } else if (msg.type === 'response_text') {
+          // 아웃핏 낭독 중이면 채팅창 렌더링 스킵 (코멘트 패널에 이미 표시됨)
+          if (_outfitStarted && !_outfitReadDone) { _currentAssistantDiv = null; } else {
           // 전체 텍스트 도착 → _currentAssistantDiv를 마크다운으로 최종 렌더링
           const thinkDiv = document.getElementById('_voiceThinkDiv');
           if (thinkDiv) thinkDiv.remove();
@@ -1229,6 +1244,7 @@
             // sentence_text 없이 response_text만 온 경우 (폴백)
             addLog(msg.text, 'assistant');
           }
+          } // end outfit 낭독 중 스킵 블록
         } else if (msg.type === 'error') {
           addLog('오류: ' + msg.message, 'assistant');
           if (inVoice) { serverState = 'listening'; updateUI('listening'); startRecognition(); }
@@ -1437,11 +1453,12 @@
         setupRecognition();
         startRecognition();
 
-        // ③ 수석 디자이너 패널 자동 오픈
+        // ③ 수석 디자이너 패널 자동 오픈 + 우측 티키타카 컬럼 표시
+        const dp = document.getElementById('designerPanel');
         if (typeof togglePanel === 'function') {
-          const dp = document.getElementById('designerPanel');
           if (dp && !dp.classList.contains('open')) togglePanel('designerPanel');
         }
+        if (dp) dp.classList.add('voice-active');
 
         // ④ WebSocket 연결 — 낭독 상태에 따라 분기
         // 아직 코디 낭독이 시작 안 됐으면 → read_full_outfit: true (서버 낭독)
@@ -1489,14 +1506,11 @@
         ws = null;
         if (reconnTimer) { clearTimeout(reconnTimer); reconnTimer = null; }
 
-        // 음성 대화창·구분선 숨기고 초기화
+        // 우측 티키타카 컬럼 숨기기 + 채팅 초기화
+        const dp2 = document.getElementById('designerPanel');
+        if (dp2) dp2.classList.remove('voice-active');
         const chatWin = document.getElementById('designerChatWindow');
-        if (chatWin) { chatWin.style.display = 'none'; chatWin.innerHTML = ''; }
-        const divider = document.getElementById('designerDivider');
-        if (divider) divider.style.display = 'none';
-        // 코멘트 영역 높이 리셋 — 다시 flex가 전체 공간 차지
-        const cw2 = document.getElementById('designerCommentWrap');
-        if (cw2) { cw2.style.height = ''; cw2.style.maxHeight = ''; }
+        if (chatWin) { chatWin.innerHTML = ''; }
       }
     });
 
@@ -1985,23 +1999,33 @@
   )();
 </script>
 
+
 <!-- ── 피드백 & 성장 JS ─────────────────────────────── -->
 <script>
-  window._styleLogId  = null;
+  window._styleLogId   = null;
   window._feedbackSent = false;
+  window._pendingScore = null;
 
-  function submitFeedback(score) {
-    if (!window._styleLogId || window._feedbackSent) return;
-    const worn = document.getElementById('feedbackWorn')?.checked || false;
-    _sendFeedback(score, null, worn);
+  // 좋아요/별로예요 선택 — 전송 전 변경 가능
+  function selectFeedback(score) {
+    if (window._feedbackSent) return;
+    window._pendingScore = score;
+    const likeBtn    = document.getElementById('feedbackLike');
+    const dislikeBtn = document.getElementById('feedbackDislike');
+    // 선택 초기화 후 선택된 버튼 하이라이트
+    if (likeBtn)    { likeBtn.style.background = '#fff';    likeBtn.style.color = '#7c3aed'; }
+    if (dislikeBtn) { dislikeBtn.style.background = '#fff'; dislikeBtn.style.color = '#db2777'; }
+    if (score >= 4 && likeBtn)    { likeBtn.style.background = '#a78bfa';    likeBtn.style.color = '#fff'; }
+    if (score <= 2 && dislikeBtn) { dislikeBtn.style.background = '#f472b6'; dislikeBtn.style.color = '#fff'; }
   }
 
-  function submitFeedbackWithText() {
+  // 전송 버튼 — 선택된 점수 + 메모 + 착용 여부 전송
+  function submitAll() {
     if (!window._styleLogId || window._feedbackSent) return;
-    const text = (document.getElementById('feedbackText')?.value || '').trim() || null;
-    const worn = document.getElementById('feedbackWorn')?.checked || false;
-    // 텍스트만 있으면 score 3(보통)으로 저장, 이전에 좋아요/싫어요가 눌렸으면 그 값 사용
-    _sendFeedback(window._lastScore || 3, text, worn);
+    const score  = window._pendingScore || 3;
+    const text   = (document.getElementById('feedbackText')?.value || '').trim() || null;
+    const worn   = document.getElementById('feedbackWorn')?.checked || false;
+    _sendFeedback(score, text, worn);
   }
 
   function _sendFeedback(score, text, worn) {
@@ -2011,29 +2035,23 @@
       body: JSON.stringify({ score, text, was_worn: worn })
     }).then(() => {
       window._feedbackSent = true;
-      window._lastScore = score;
-      // 버튼 하이라이트
-      const likeBtn    = document.getElementById('feedbackLike');
-      const dislikeBtn = document.getElementById('feedbackDislike');
-      if (score >= 4) {
-        if (likeBtn) { likeBtn.style.background = '#a78bfa'; likeBtn.style.color = '#fff'; }
-      } else if (score <= 2) {
-        if (dislikeBtn) { dislikeBtn.style.background = '#f472b6'; dislikeBtn.style.color = '#fff'; }
-      }
-      // 텍스트 입력창 숨기고 완료 메시지
+      // 버튼·입력창 숨기고 완료 메시지 표시
       const textWrap = document.getElementById('feedbackTextWrap');
       if (textWrap) textWrap.style.display = 'none';
+      const toggle = document.getElementById('feedbackTextToggle');
+      if (toggle) toggle.style.display = 'none';
       const done = document.getElementById('feedbackDone');
       if (done) done.style.display = '';
     }).catch(() => {});
   }
 
   function toggleFeedbackText() {
+    if (window._feedbackSent) return;
     const wrap   = document.getElementById('feedbackTextWrap');
     const toggle = document.getElementById('feedbackTextToggle');
     if (!wrap) return;
     const isOpen = wrap.style.display !== 'none';
-    wrap.style.display   = isOpen ? 'none' : '';
+    wrap.style.display = isOpen ? 'none' : '';
     if (toggle) toggle.textContent = isOpen ? '✎ 메모 남기기' : '▲ 접기';
   }
 </script>

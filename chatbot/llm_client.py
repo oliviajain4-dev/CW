@@ -8,6 +8,13 @@ load_dotenv()
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
 
+def _require_claude_api_key() -> None:
+    if not CLAUDE_API_KEY:
+        raise RuntimeError(
+            "CLAUDE_API_KEY 환경변수가 설정되지 않았습니다. 배포 환경 또는 .env 파일에서 값을 확인해주세요."
+        )
+
+
 def get_outfit_comment(weather_data: dict, style_rec: dict,
                        layering: dict, tpo: str = "일상",
                        user_profile: dict = None,
@@ -24,6 +31,7 @@ def get_outfit_comment(weather_data: dict, style_rec: dict,
         ...
     ]
     """
+    _require_claude_api_key()
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
     system_prompt = """당신은 사용자의 실제 옷장을 완벽하게 파악하고 있는 개인 전담 스타일리스트입니다.
@@ -215,6 +223,7 @@ layering_needed=True
 
 async def stream_chatbot_response(system_prompt: str, messages: list, max_tokens: int = 800):
     """Claude 스트리밍 응답 생성기. voice/router.py에서 사용됩니다."""
+    _require_claude_api_key()
     client = anthropic.AsyncAnthropic(api_key=CLAUDE_API_KEY)
     async with client.messages.stream(
         model="claude-sonnet-4-6",
@@ -232,6 +241,7 @@ def get_chatbot_response(user_message: str, context: dict = None,
     챗봇 대화용 — 수석 디자이너가 자유롭게 대화
     history: [{"role":"user","content":"..."}, {"role":"assistant","content":"..."}, ...]
     """
+    _require_claude_api_key()
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
     system_prompt = """당신은 파리·밀라노·서울을 무대로 30년 경력을 쌓은 수석 패션 디자이너입니다.

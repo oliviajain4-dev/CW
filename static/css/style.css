@@ -585,7 +585,7 @@ body {
 #weatherPanel  { top: 64px; left: 88px; width: 260px; }
 #stylePanel    { top: 64px; left: 88px; width: 280px; }
 #itemPanel     { top: 64px; left: 88px; width: 300px; }
-#designerPanel { top: 64px; left: 88px; width: 460px; min-width: 280px; height: 560px; min-height: 260px; }
+/* #designerPanel 크기/위치는 아래 2컬럼 섹션에서 통합 관리 */
 #shoppingPanel { top: 64px; left: 88px; width: 300px; }
 #calendarPanel { top: 64px; left: 88px; width: 280px; min-height: 200px; }
 #calendarPanel .panel-header {
@@ -798,55 +798,74 @@ body {
 }
 .designer-tts-btn:hover { opacity: 0.85; }
 /* 수석 디자이너 패널 내부 레이아웃 — flex 컬럼으로 대화창 가변 높이 */
+/* ── designerPanel 2컬럼 레이아웃 ────────────────────────── */
+#designerPanel {
+  top: 64px; left: 88px;
+  width: 460px; min-width: 280px;
+  height: 560px; min-height: 260px;
+  transition: width 0.25s ease;
+}
+/* 티키타카 ON 시 패널 가로 확장 */
+#designerPanel.voice-active {
+  width: 820px;
+}
 #designerPanel .panel-body {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
   padding: 10px 14px 8px;
-}
-#designerPanel .designer-toggle-btn {
-  flex-shrink: 0;
-}
-#designerPanel .designer-comment-wrap {
-  /* flex-shrink: 0 제거 → 패널 높이보다 길면 flex가 줄여서 overflow-y 스크롤 활성화 */
-  overflow-y: auto;
-  min-height: 60px;
-}
-#designerPanel #designerVoiceStatus {
-  flex-shrink: 0;
+  gap: 0;
 }
 
-/* 드래그 구분선 */
-.designer-drag-divider {
+/* 좌측 컬럼 — 코멘트 + 피드백 */
+.designer-left-col {
+  flex: 0 0 420px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.designer-left-col::-webkit-scrollbar { width: 4px; }
+.designer-left-col::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 4px; }
+#designerPanel .designer-toggle-btn { flex-shrink: 0; }
+#designerPanel .designer-comment-wrap { overflow-y: auto; min-height: 60px; }
+
+/* 세로 구분선 */
+.designer-col-divider {
+  display: none;
+  width: 1px;
+  background: rgba(0,0,0,0.10);
+  margin: 0 12px;
   flex-shrink: 0;
-  height: 10px;
-  cursor: ns-resize;
+}
+#designerPanel.voice-active .designer-col-divider { display: block; }
+
+/* 우측 컬럼 — 티키타카 (기본 숨김, ON 시 표시) */
+.designer-right-col {
+  display: none;
+  flex: 1;
+  min-width: 260px;
+  flex-direction: column;
+  gap: 6px;
+}
+#designerPanel.voice-active .designer-right-col { display: flex; }
+
+/* 우측 컬럼 상단 타이틀+상태 */
+.designer-right-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin: 2px -14px; /* 패널 좌우 패딩 상쇄해서 풀너비 */
-  transition: background 0.15s;
-}
-.designer-drag-divider::after {
-  content: '';
-  width: 44px;
-  height: 3px;
-  border-radius: 3px;
-  background: rgba(0,0,0,0.18);
-  transition: background 0.15s, width 0.15s;
-}
-.designer-drag-divider:hover::after,
-.designer-drag-divider.is-dragging::after {
-  background: rgba(119,85,170,0.55);
-  width: 64px;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  flex-shrink: 0;
 }
 
-/* 음성 대화창 — ON 시 남은 공간 채움 */
-#designerPanel #designerChatWindow {
+/* 음성 대화창 */
+#designerChatWindow {
   font-size: 14px;
   flex: 1;
   min-height: 60px;
-  max-height: none;
   overflow-y: auto;
 }
 /* 디자이너 패널 헤더 레이아웃 */

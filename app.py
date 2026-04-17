@@ -1168,7 +1168,7 @@ async def api_recommend(request: Request, quick: bool = False):
         _recommend_cache[cache_key_full] = {"data": full_result, "ts": time.time()}
         return JSONResponse(full_result)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": str(e), "error_type": type(e).__name__}, status_code=500)
 
 
 @app.get("/api/wardrobe", name="api_wardrobe")
@@ -1257,7 +1257,7 @@ async def api_shopping(request: Request):
         )
         return JSONResponse({"cards": cards})
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": str(e), "error_type": type(e).__name__}, status_code=500)
 
 
 # ══════════════════════════════════════════════════════════════════

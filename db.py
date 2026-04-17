@@ -12,6 +12,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")  # Docker에서 주입
+if not DATABASE_URL:
+    pg_user = os.getenv("POSTGRES_USER")
+    pg_pass = os.getenv("POSTGRES_PASSWORD")
+    pg_db = os.getenv("POSTGRES_DB")
+    pg_host = os.getenv("POSTGRES_HOST", "db")
+    pg_port = os.getenv("POSTGRES_PORT", "5432")
+    if pg_user and pg_pass and pg_db:
+        DATABASE_URL = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
 _USE_POSTGRES = bool(DATABASE_URL)
 
 
@@ -103,6 +111,29 @@ def is_postgres() -> bool:
 
 def db_engine() -> str:
     return "PostgreSQL" if _USE_POSTGRES else "SQLite"
+
+
+def _ensure_recommendation_items_columns(conn) -> None:
+    """PostgreSQL에서 recommendation_items 스키마가 최신인지 확인합니다."""
+    if not _USE_POSTGRES:
+        return
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s
+              AND column_name IN ('user_liked', 'was_worn')
+            """,
+            ('recommendation_items',)
+        )
+        existing = {row[0] for row in cur.fetchall()}
+
+        if 'user_liked' not in existing:
+            cur.execute("ALTER TABLE recommendation_items ADD COLUMN user_liked BOOLEAN")
+        if 'was_worn' not in existing:
+            cur.execute("ALTER TABLE recommendation_items ADD COLUMN was_worn BOOLEAN")
 
 
 # ── 스타일 로그 저장 (누적 데이터 핵심) ──────────────────────────
@@ -307,6 +338,7 @@ def save_item_feedback(rec_item_id: int, liked: bool = None,
     if not _USE_POSTGRES or not rec_item_id:
         return
     with get_db() as conn:
+        _ensure_recommendation_items_columns(conn)
         execute(conn, """
             UPDATE recommendation_items
             SET user_liked = COALESCE(%s, user_liked),
@@ -425,14 +457,19 @@ def get_style_report(user_id) -> dict:
             WHERE user_id = %s
         """, (user_id,))
 
-        cat_likes = fetchall(conn, """
-            SELECT ri.category, COUNT(*) AS cnt
-            FROM recommendation_items ri
-            JOIN style_logs sl ON ri.style_log_id = sl.id
-            WHERE sl.user_id = %s AND ri.user_liked = true
-            GROUP BY ri.category
-            ORDER BY cnt DESC
-        """, (user_id,))
+        cat_likes = []
+        try:
+            _ensure_recommendation_items_columns(conn)
+            cat_likes = fetchall(conn, """
+                SELECT ri.category, COUNT(*) AS cnt
+                FROM recommendation_items ri
+                JOIN style_logs sl ON ri.style_log_id = sl.id
+                WHERE sl.user_id = %s AND ri.user_liked = true
+                GROUP BY ri.category
+                ORDER BY cnt DESC
+            """, (user_id,))
+        except Exception:
+            cat_likes = []
 
         correction_stats = fetchone(conn, """
             SELECT
