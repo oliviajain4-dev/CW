@@ -13,7 +13,8 @@ def get_outfit_comment(weather_data: dict, style_rec: dict,
                        user_profile: dict = None,
                        wardrobe_items: list = None,
                        trend_news: list = None,
-                       calendar_events: list = None) -> str:
+                       calendar_events: list = None,
+                       feedback_summary: str = None) -> str:
     """
     수석 디자이너 코멘트 — 실제 옷장 아이템 기반 맞춤 스타일링
 
@@ -140,7 +141,13 @@ layering_needed=True
         from chatbot.calendar_client import format_events_for_prompt
         calendar_section = "\n【오늘 일정 (TPO 맞춤 스타일링에 반영)】\n" + format_events_for_prompt(calendar_events)
 
+    # ── 피드백 히스토리 (사용자 취향 학습) ───────────────────────
+    feedback_section = ""
+    if feedback_summary:
+        feedback_section = f"\n{feedback_summary}\n"
+
     user_prompt = f"""오늘 스타일링 해줘. 반드시 실제 옷장 아이템 이름을 직접 언급하면서 코디를 구성해.
+{feedback_section}
 
 【오늘 날씨】
 상태: {style_rec['condition_label']}

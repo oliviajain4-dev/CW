@@ -182,6 +182,57 @@
   margin:4px 0;letter-spacing:0.02em;
   transition:all 0.2s;
 "></div>
+
+    <!-- ③ 피드백 & 성장 — 코멘트 로드 후 표시 -->
+    <div id="feedbackSection" style="display:none; margin-top:10px; padding:10px 12px;
+         background:rgba(167,139,250,0.07); border-radius:12px; border:1px solid rgba(167,139,250,0.2);">
+      <div style="font-size:11px; color:#9b8ec4; font-weight:600; margin-bottom:8px; letter-spacing:0.03em;">
+        오늘 추천 어땠어요?
+      </div>
+      <!-- 좋아요 / 싫어요 -->
+      <div style="display:flex; gap:8px; margin-bottom:8px;">
+        <button id="feedbackLike" onclick="submitFeedback(5)"
+          style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #a78bfa;
+                 background:#fff; color:#7c3aed; font-size:16px; cursor:pointer;
+                 transition:all 0.15s;" title="좋아요">
+          👍 좋아요
+        </button>
+        <button id="feedbackDislike" onclick="submitFeedback(1)"
+          style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #f9a8d4;
+                 background:#fff; color:#db2777; font-size:16px; cursor:pointer;
+                 transition:all 0.15s;" title="별로예요">
+          👎 별로예요
+        </button>
+      </div>
+      <!-- 실제 착용 체크 -->
+      <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#6b7280;
+                    cursor:pointer; margin-bottom:6px;">
+        <input type="checkbox" id="feedbackWorn" style="width:14px; height:14px; accent-color:#a78bfa;">
+        오늘 실제로 이 코디 입었어요
+      </label>
+      <!-- 자유 피드백 (접기/펼치기) -->
+      <div id="feedbackTextWrap" style="display:none; margin-top:4px;">
+        <textarea id="feedbackText" placeholder="한 마디 남겨줘요 (선택)" rows="2"
+          style="width:100%; border-radius:8px; border:1px solid #e5e7eb; padding:6px 8px;
+                 font-size:12px; resize:none; box-sizing:border-box; color:#374151;">
+        </textarea>
+        <button onclick="submitFeedbackWithText()"
+          style="margin-top:4px; width:100%; padding:6px; border-radius:8px;
+                 background:#a78bfa; color:#fff; border:none; font-size:12px; cursor:pointer;">
+          전송
+        </button>
+      </div>
+      <button onclick="toggleFeedbackText()"
+        style="font-size:10px; color:#a78bfa; background:none; border:none; cursor:pointer;
+               padding:0; margin-top:2px;" id="feedbackTextToggle">
+        ✎ 메모 남기기
+      </button>
+      <!-- 피드백 완료 메시지 -->
+      <div id="feedbackDone" style="display:none; text-align:center; color:#7c3aed;
+           font-size:12px; padding:4px 0;">
+        ✓ 피드백 저장됐어요! 다음 추천에 반영할게요 💜
+      </div>
+    </div>
   </div>
   <div class="resize-handle" data-dir="n"></div>
   <div class="resize-handle" data-dir="ne"></div>
@@ -666,6 +717,12 @@
         return;
       }
       if (data.comment) fillDesignerPanel(data.comment);
+      // 피드백 섹션 활성화 (style_log_id 저장)
+      if (data.style_log_id) {
+        window._styleLogId = data.style_log_id;
+        const sec = document.getElementById('feedbackSection');
+        if (sec) sec.style.display = '';
+      }
     })
     .catch(() => {
       const area = document.getElementById('designerCommentArea');
@@ -1926,5 +1983,58 @@
     renderer.render(scene, camera);
   }
   )();
+</script>
+
+<!-- ── 피드백 & 성장 JS ─────────────────────────────── -->
+<script>
+  window._styleLogId  = null;
+  window._feedbackSent = false;
+
+  function submitFeedback(score) {
+    if (!window._styleLogId || window._feedbackSent) return;
+    const worn = document.getElementById('feedbackWorn')?.checked || false;
+    _sendFeedback(score, null, worn);
+  }
+
+  function submitFeedbackWithText() {
+    if (!window._styleLogId || window._feedbackSent) return;
+    const text = (document.getElementById('feedbackText')?.value || '').trim() || null;
+    const worn = document.getElementById('feedbackWorn')?.checked || false;
+    // 텍스트만 있으면 score 3(보통)으로 저장, 이전에 좋아요/싫어요가 눌렸으면 그 값 사용
+    _sendFeedback(window._lastScore || 3, text, worn);
+  }
+
+  function _sendFeedback(score, text, worn) {
+    fetch(`/feedback/style/${window._styleLogId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score, text, was_worn: worn })
+    }).then(() => {
+      window._feedbackSent = true;
+      window._lastScore = score;
+      // 버튼 하이라이트
+      const likeBtn    = document.getElementById('feedbackLike');
+      const dislikeBtn = document.getElementById('feedbackDislike');
+      if (score >= 4) {
+        if (likeBtn) { likeBtn.style.background = '#a78bfa'; likeBtn.style.color = '#fff'; }
+      } else if (score <= 2) {
+        if (dislikeBtn) { dislikeBtn.style.background = '#f472b6'; dislikeBtn.style.color = '#fff'; }
+      }
+      // 텍스트 입력창 숨기고 완료 메시지
+      const textWrap = document.getElementById('feedbackTextWrap');
+      if (textWrap) textWrap.style.display = 'none';
+      const done = document.getElementById('feedbackDone');
+      if (done) done.style.display = '';
+    }).catch(() => {});
+  }
+
+  function toggleFeedbackText() {
+    const wrap   = document.getElementById('feedbackTextWrap');
+    const toggle = document.getElementById('feedbackTextToggle');
+    if (!wrap) return;
+    const isOpen = wrap.style.display !== 'none';
+    wrap.style.display   = isOpen ? 'none' : '';
+    if (toggle) toggle.textContent = isOpen ? '✎ 메모 남기기' : '▲ 접기';
+  }
 </script>
 {% endblock %}

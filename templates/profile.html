@@ -238,4 +238,156 @@ function previewAvatar(input) {
   reader.readAsDataURL(input.files[0]);
 }
 </script>
+
+<!-- ── 스타일 리포트 ──────────────────────────────────── -->
+<div class="form-overlay" style="margin-top:16px;">
+  <div class="form-card" id="styleReportCard">
+    <h1>📊 스타일 리포트</h1>
+    <p style="font-size:12px;color:#aaa;margin:-8px 0 16px;">
+      내 피드백이 쌓일수록 추천이 더 정확해져요
+    </p>
+    <div id="reportLoading" style="color:#bbb;font-size:13px;text-align:center;padding:20px 0;">
+      ⏳ 불러오는 중...
+    </div>
+    <div id="reportContent" style="display:none;">
+      <!-- 요약 통계 -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px;">
+        <div class="report-stat-card">
+          <div class="report-stat-num" id="statTotal">0</div>
+          <div class="report-stat-label">총 추천</div>
+        </div>
+        <div class="report-stat-card" style="border-color:#a78bfa;">
+          <div class="report-stat-num" style="color:#7c3aed;" id="statLikes">0</div>
+          <div class="report-stat-label">👍 좋아요</div>
+        </div>
+        <div class="report-stat-card" style="border-color:#f9a8d4;">
+          <div class="report-stat-num" style="color:#db2777;" id="statWorn">0</div>
+          <div class="report-stat-label">👗 실제 착용</div>
+        </div>
+      </div>
+
+      <!-- 카테고리 선호도 바 차트 -->
+      <div id="catLikesSection" style="display:none;">
+        <h2 style="font-size:13px;color:#555;margin-bottom:10px;">선호 카테고리</h2>
+        <div id="catLikesChart"></div>
+      </div>
+
+      <!-- AI 분류 정확도 -->
+      <div id="correctionSection" style="margin-top:14px;padding:12px;
+           background:#faf5ff;border-radius:10px;border:1px solid #ede9fe;">
+        <h2 style="font-size:13px;color:#7c3aed;margin:0 0 8px;">🤖 AI 분류 정확도</h2>
+        <div id="correctionStats" style="font-size:12px;color:#6b7280;"></div>
+      </div>
+
+      <!-- 성장 안내 -->
+      <div style="margin-top:14px;padding:12px;background:#f0fdf4;border-radius:10px;
+                  border:1px solid #bbf7d0;font-size:11px;color:#15803d;line-height:1.6;">
+        💡 <strong>피드백을 남길수록</strong> AI가 당신의 취향을 더 잘 기억해요.<br>
+        옷장에서 분류가 틀린 아이템을 <strong>✏️ 수정</strong>하면 AI 학습 데이터가 됩니다.
+      </div>
+    </div>
+    <div id="reportEmpty" style="display:none;text-align:center;color:#bbb;
+         font-size:13px;padding:20px 0;">
+      아직 추천 기록이 없어요<br>
+      <span style="font-size:11px;">대시보드에서 추천을 받고 피드백을 남겨보세요</span>
+    </div>
+  </div>
+</div>
+
+<style>
+.report-stat-card {
+  text-align: center;
+  padding: 12px 8px;
+  border-radius: 10px;
+  border: 1.5px solid #e5e7eb;
+  background: #fafafa;
+}
+.report-stat-num {
+  font-size: 22px;
+  font-weight: 700;
+  color: #374151;
+  line-height: 1.2;
+}
+.report-stat-label {
+  font-size: 10px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+.cat-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+.cat-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #f3f4f6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cat-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #a78bfa, #f472b6);
+  transition: width 0.6s ease;
+}
+</style>
+
+<script>
+(function loadStyleReport() {
+  fetch('/api/style-report')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('reportLoading').style.display = 'none';
+      const stats = data.stats || {};
+      const total = parseInt(stats.total || 0);
+
+      if (total === 0) {
+        document.getElementById('reportEmpty').style.display = '';
+        return;
+      }
+
+      document.getElementById('reportContent').style.display = '';
+      document.getElementById('statTotal').textContent = total;
+      document.getElementById('statLikes').textContent = stats.likes || 0;
+      document.getElementById('statWorn').textContent  = stats.worn_count || 0;
+
+      // 카테고리 선호도 바 차트
+      const catLikes = data.cat_likes || [];
+      if (catLikes.length > 0) {
+        const sec   = document.getElementById('catLikesSection');
+        const chart = document.getElementById('catLikesChart');
+        sec.style.display = '';
+        const maxCnt = Math.max(...catLikes.map(c => parseInt(c.cnt)));
+        const emojiMap = {'상의':'👕','하의':'👖','원피스':'👗','아우터':'🧥','신발':'👟','악세서리':'💍'};
+        chart.innerHTML = catLikes.map(c => {
+          const pct  = maxCnt > 0 ? Math.round(parseInt(c.cnt) / maxCnt * 100) : 0;
+          const emoji = emojiMap[c.category] || '👕';
+          return `<div class="cat-bar-row">
+            <span style="width:56px;color:#374151;">${emoji} ${c.category}</span>
+            <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${pct}%"></div></div>
+            <span style="width:24px;color:#9ca3af;text-align:right;">${c.cnt}</span>
+          </div>`;
+        }).join('');
+      }
+
+      // AI 분류 정확도
+      const cs = data.correction_stats || {};
+      const totalItems  = parseInt(cs.total_items  || 0);
+      const corrected   = parseInt(cs.corrected     || 0);
+      const verified    = parseInt(cs.verified      || 0);
+      const autoCorrect = totalItems > 0 ? Math.round((totalItems - corrected) / totalItems * 100) : 0;
+      document.getElementById('correctionStats').innerHTML = totalItems > 0
+        ? `등록 아이템 ${totalItems}개 중 AI 자동 분류 정확: <strong>${autoCorrect}%</strong>
+           (수정 ${corrected}회 / 확인 ${verified}회)`
+        : '아직 옷장 아이템이 없어요';
+    })
+    .catch(() => {
+      document.getElementById('reportLoading').style.display = 'none';
+      document.getElementById('reportEmpty').style.display = '';
+    });
+})();
+</script>
 {% endblock %}
