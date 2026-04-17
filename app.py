@@ -267,7 +267,8 @@ def allowed_file(filename: str) -> bool:
 
 
 # 카테고리 한→영 변환 (Cloudinary public_id는 영문만 권장)
-_CAT_EN = {"상의": "top", "하의": "bottom", "아우터": "outer", "원피스": "dress"}
+_CAT_EN = {"상의": "top", "하의": "bottom", "아우터": "outer", "원피스": "dress",
+           "신발": "shoes", "악세서리": "accessory"}
 
 
 def upload_image(
@@ -696,7 +697,7 @@ def wardrobe(request: Request):
             f"SELECT * FROM wardrobe_items WHERE (user_id={ph} OR user_id IS NULL) ORDER BY category, created_at DESC",
             (user.id,)
         )
-    categories = {"상의": [], "하의": [], "원피스": [], "아우터": []}
+    categories = {"상의": [], "하의": [], "원피스": [], "아우터": [], "신발": [], "악세서리": []}
     for item in items:
         cat = item["category"]
         if cat in categories:
@@ -739,7 +740,7 @@ async def wardrobe_add(request: Request):
         print(f"[wardrobe_add] 분석 시작: {len(local_paths)}장")
         results = await asyncio.to_thread(analyze_outfit_batch, local_paths)
         for fname, res in zip([os.path.basename(p) for p in local_paths], results):
-            cat  = next((k for k in ["아우터","원피스","상의","하의"] if k in res), "?")
+            cat  = next((k for k in ["아우터","원피스","상의","하의","신발","악세서리"] if k in res), "?")
             item = res.get(cat, {}).get("item", "?") if cat != "?" else "?"
             print(f"[wardrobe_add] {fname[:30]} → 카테고리={cat}, 아이템={item}")
     except Exception as e:
@@ -753,7 +754,7 @@ async def wardrobe_add(request: Request):
     # ── 3. Cloudinary 업로드 → DB 저장 (순서 중요: 업로드 실패 시 DB 저장 안 함) ──
     for (local_path, orig_filename), result in zip(saved, results):
         try:
-            category = next((k for k in ["아우터", "원피스", "상의", "하의"] if k in result), None)
+            category = next((k for k in ["아우터", "원피스", "상의", "하의", "신발", "악세서리"] if k in result), None)
             if category is None:
                 raise ValueError("분류 결과에 카테고리가 없습니다.")
 
@@ -819,7 +820,7 @@ async def wardrobe_move(item_id: int, request: Request):
     _require_user(request)
     data         = await request.json()
     new_category = data.get("category")
-    if new_category not in ["상의", "하의", "원피스", "아우터"]:
+    if new_category not in ["상의", "하의", "원피스", "아우터", "신발", "악세서리"]:
         return JSONResponse({"error": "invalid category"}, status_code=400)
     ph = "%s" if is_postgres() else "?"
     with get_db() as conn:

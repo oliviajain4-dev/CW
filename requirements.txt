@@ -12,7 +12,10 @@ python-multipart
 psycopg2-binary
 
 # ── AI / 이미지 분석 ──────────────────────────────
-# torch/torchvision → Dockerfile에서 CPU 버전 별도 설치
+# torch는 Dockerfile에서 CPU 버전으로 먼저 설치됨
+# 로컬 실행 시: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
 open_clip_torch
 transformers
 timm

@@ -105,9 +105,11 @@
     {% for cat_name, items in [('상의', wardrobe_items|selectattr('category','eq','상의')|list),
     ('하의', wardrobe_items|selectattr('category','eq','하의')|list),
     ('원피스', wardrobe_items|selectattr('category','eq','원피스')|list),
-    ('아우터', wardrobe_items|selectattr('category','eq','아우터')|list)] %}
+    ('아우터', wardrobe_items|selectattr('category','eq','아우터')|list),
+    ('신발', wardrobe_items|selectattr('category','eq','신발')|list),
+    ('악세서리', wardrobe_items|selectattr('category','eq','악세서리')|list)] %}
     <div class="category-sep">
-      {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% elif cat_name == '원피스' %}👗{% else %}🧥{% endif %} {{
+      {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% elif cat_name == '원피스' %}👗{% elif cat_name == '아우터' %}🧥{% elif cat_name == '신발' %}👟{% else %}💍{% endif %} {{
       cat_name }}
     </div>
     {% if items %}

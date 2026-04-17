@@ -17,8 +17,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # requirements.txt 먼저 복사 → 소스 변경 시 pip 레이어 캐시 재사용
 COPY requirements.txt .
 
-# 나머지 패키지 설치 (torch 제외 — requirements.txt에 포함됨)
-RUN grep -vE "^torch(audio|vision)?[>=!]" requirements.txt | pip install -r /dev/stdin --extra-index-url https://download.pytorch.org/whl/cpu
+# 1단계: PyTorch CPU 버전 먼저 설치 (GPU 버전 방지 — CPU 전용 인덱스 강제)
+RUN pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# 2단계: 나머지 패키지 설치 (torch는 위에서 이미 설치했으므로 requirements에서 제외)
+RUN grep -vE "^(torch|torchvision)" requirements.txt | pip install -r /dev/stdin
 
 # ── 앱 소스 복사 ───────────────────────────────────
 COPY . .
