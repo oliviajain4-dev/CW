@@ -175,12 +175,15 @@ layering_needed=True
 {news_section}
 {calendar_section}"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2500,
-        messages=[{"role": "user", "content": user_prompt}],
-        system=system_prompt
-    )
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2500,
+            messages=[{"role": "user", "content": user_prompt}],
+            system=system_prompt
+        )
+    except Exception:
+        return {"comment": "AI 코멘트를 불러오지 못했어. 잠시 후 다시 시도해줘!", "bubbles": {}}
 
     raw = message.content[0].text.strip()
 

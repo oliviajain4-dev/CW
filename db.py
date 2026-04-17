@@ -146,42 +146,44 @@ def save_style_log(user_id, weather_data: dict, style_rec: dict,
     if not _USE_POSTGRES:
         return None  # SQLite 환경에서는 스킵
 
-    import psycopg2.extras
-    with get_db() as conn:
-        # 날씨 로그 먼저 저장
-        weather_id = executereturning(conn, """
-            INSERT INTO weather_logs
-              (location_nx, location_ny, morning_tmp, afternoon_tmp, evening_tmp,
-               morning_reh, precip_type, temp_range, raw_data)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            62, 123,
-            weather_data["morning"]["feels_like"],
-            weather_data["afternoon"]["feels_like"],
-            weather_data["evening"]["feels_like"],
-            weather_data["morning"]["reh"],
-            weather_data["morning"]["pty"],
-            weather_data["temp_range_diff"],
-            json.dumps(weather_data, ensure_ascii=False)
-        ))
+    try:
+        with get_db() as conn:
+            # 날씨 로그 먼저 저장
+            weather_id = executereturning(conn, """
+                INSERT INTO weather_logs
+                  (location_nx, location_ny, morning_tmp, afternoon_tmp, evening_tmp,
+                   morning_reh, precip_type, temp_range, raw_data)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                62, 123,
+                weather_data["morning"]["feels_like"],
+                weather_data["afternoon"]["feels_like"],
+                weather_data["evening"]["feels_like"],
+                weather_data["morning"]["reh"],
+                weather_data["morning"]["pty"],
+                weather_data["temp_range_diff"],
+                json.dumps(weather_data, ensure_ascii=False)
+            ))
 
-        # 스타일 로그 저장
-        log_id = executereturning(conn, """
-            INSERT INTO style_logs
-              (user_id, weather_log_id, tpo, style_rec, layering_info, ai_comment)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            user_id,
-            weather_id,
-            tpo,
-            json.dumps(style_rec, ensure_ascii=False),
-            json.dumps(layering, ensure_ascii=False),
-            ai_comment
-        ))
+            # 스타일 로그 저장
+            log_id = executereturning(conn, """
+                INSERT INTO style_logs
+                  (user_id, weather_log_id, tpo, style_rec, layering_info, ai_comment)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                user_id,
+                weather_id,
+                tpo,
+                json.dumps(style_rec, ensure_ascii=False),
+                json.dumps(layering, ensure_ascii=False),
+                ai_comment
+            ))
 
-    return log_id
+        return log_id
+    except Exception:
+        return None
 
 
 def save_feedback(log_id: int, score: int, text: str = None, was_worn: bool = None):
@@ -402,15 +404,18 @@ def get_feedback_summary(user_id, limit: int = 10) -> str:
     if not _USE_POSTGRES or not user_id:
         return ""
 
-    with get_db() as conn:
-        rows = fetchall(conn, """
-            SELECT feedback_score, feedback_text, was_worn, tpo,
-                   style_rec->>'condition_label' AS weather_label
-            FROM style_logs
-            WHERE user_id = %s AND feedback_score IS NOT NULL
-            ORDER BY created_at DESC
-            LIMIT %s
-        """, (user_id, limit))
+    try:
+        with get_db() as conn:
+            rows = fetchall(conn, """
+                SELECT feedback_score, feedback_text, was_worn, tpo,
+                       style_rec->>'condition_label' AS weather_label
+                FROM style_logs
+                WHERE user_id = %s AND feedback_score IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (user_id, limit))
+    except Exception:
+        return ""
 
     if not rows:
         return ""

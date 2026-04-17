@@ -330,12 +330,12 @@
     tpo: "{{ profile.get('tpo', '일상') }}",
     wardrobe: [
       {% for item in wardrobe_items %}
-  { "category": "{{ item['category'] }}", "item_type": "{{ item['item_type'] }}", "warmth": {{ item['warmth'] }}, "texture": "{{ item['texture'] }}" } {% if not loop.last %}, {% endif %}
+  { "category": "{{ item['category'] | e }}", "item_type": "{{ item['item_type'] | e }}", "warmth": {{ item['warmth'] | int if item['warmth'] is not none else 0 }}, "texture": "{{ item['texture'] | e if item['texture'] else '' }}" } {% if not loop.last %}, {% endif %}
   {% endfor %}
     ],
   user_profile: {
     name: "{{ profile.get('name', '') }}",
-    sensitivity: {{ profile.get('sensitivity', 3) }},
+    sensitivity: {{ profile.get('sensitivity', 3) | int if profile.get('sensitivity') is not none else 3 }},
     height: "{{ profile.get('height', '') }}",
     body_type: "{{ profile.get('body_type', '보통') }}",
     style_pref: "{{ profile.get('style_pref', '캐주얼') }}",

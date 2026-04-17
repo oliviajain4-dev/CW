@@ -19,8 +19,9 @@ Flask → FastAPI 마이그레이션 + 음성 파이프라인(voice/router.py) �
   POST /feedback/{log_id}    → 코디 피드백
   POST /chat                 → 챗봇 API
   GET  /api/weather          → 날씨 JSON
-  GET  /api/recommend        → 코디 추천 JSON
-  GET  /api/shopping         → 쇼핑 추천 JSON
+
+  
+  
   GET  /fashion-show         → 패션쇼 페이지
   + voice/* (voice/router.py)
 """
@@ -404,8 +405,44 @@ def init_db():
                 ("avatar_url",    "TEXT"),
             ]:
                 execute(conn, f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {definition}")
-            execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_email_uidx    ON users(email)     WHERE email IS NOT NULL")
-            execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_uidx ON users(google_id) WHERE google_id IS NOT NULL")
+            try:
+                execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_email_uidx    ON users(email)     WHERE email IS NOT NULL")
+                execute(conn, "CREATE UNIQUE INDEX IF NOT EXISTS users_google_id_uidx ON users(google_id) WHERE google_id IS NOT NULL")
+            except Exception:
+                pass
+            # style_logs / weather_logs: init.sql로 생성되지만 기존 DB 볼륨에는 없을 수 있음
+            execute(conn, """
+                CREATE TABLE IF NOT EXISTS weather_logs (
+                    id           SERIAL PRIMARY KEY,
+                    log_date     DATE DEFAULT CURRENT_DATE,
+                    location_nx  SMALLINT,
+                    location_ny  SMALLINT,
+                    morning_tmp  REAL,
+                    afternoon_tmp REAL,
+                    evening_tmp  REAL,
+                    morning_reh  REAL,
+                    precip_type  SMALLINT,
+                    temp_range   REAL,
+                    raw_data     JSONB,
+                    created_at   TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+            execute(conn, """
+                CREATE TABLE IF NOT EXISTS style_logs (
+                    id             SERIAL PRIMARY KEY,
+                    user_id        UUID REFERENCES users(id) ON DELETE SET NULL,
+                    weather_log_id INTEGER REFERENCES weather_logs(id) ON DELETE SET NULL,
+                    log_date       DATE DEFAULT CURRENT_DATE,
+                    tpo            VARCHAR(20),
+                    style_rec      JSONB,
+                    layering_info  JSONB,
+                    ai_comment     TEXT,
+                    feedback_score SMALLINT,
+                    feedback_text  TEXT,
+                    was_worn       BOOLEAN,
+                    created_at     TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
         print(f"[DB] {db_engine()} 연결됨")
         return
 

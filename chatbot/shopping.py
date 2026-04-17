@@ -92,11 +92,14 @@ def get_shopping_needs(wardrobe_items: list, style_rec: dict,
   ]
 }}"""
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=500,
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+    except Exception:
+        return []
 
     raw = message.content[0].text.strip()
 
@@ -104,7 +107,10 @@ def get_shopping_needs(wardrobe_items: list, style_rec: dict,
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not match:
         return []
-    data = json.loads(match.group())
+    try:
+        data = json.loads(match.group())
+    except Exception:
+        return []
     return data.get("shopping_needs", [])
 
 
