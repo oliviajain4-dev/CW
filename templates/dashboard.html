@@ -179,16 +179,33 @@
       <div id="feedbackSection" style="display:none; margin-top:10px; padding:10px 12px;
            background:rgba(167,139,250,0.07); border-radius:12px; border:1px solid rgba(167,139,250,0.2);">
         <div style="font-size:11px; color:#9b8ec4; font-weight:600; margin-bottom:8px;">오늘 추천 어땠어요?</div>
-        <div style="display:flex; gap:8px; margin-bottom:8px;">
-          <button id="feedbackLike" onclick="selectFeedback(5)"
-            style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #a78bfa;
-                   background:#fff; color:#7c3aed; font-size:16px; cursor:pointer; transition:all 0.15s;">
-            👍 좋아요
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+          <button id="feedbackBtn5" onclick="selectFeedback(5)"
+            style="padding:7px 4px; border-radius:20px; border:1.5px solid #a78bfa;
+                   background:#fff; color:#7c3aed; font-size:13px; cursor:pointer; transition:all 0.15s;">
+            🔥 취향 저격
           </button>
-          <button id="feedbackDislike" onclick="selectFeedback(1)"
-            style="flex:1; padding:7px 0; border-radius:20px; border:1.5px solid #f9a8d4;
-                   background:#fff; color:#db2777; font-size:16px; cursor:pointer; transition:all 0.15s;">
-            👎 별로예요
+          <button id="feedbackBtn4" onclick="selectFeedback(4)"
+            style="padding:7px 4px; border-radius:20px; border:1.5px solid #c4b5fd;
+                   background:#fff; color:#6d28d9; font-size:13px; cursor:pointer; transition:all 0.15s;">
+            👍 꽤 괜찮음
+          </button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; margin-bottom:8px;">
+          <button id="feedbackBtn3" onclick="selectFeedback(3)"
+            style="padding:7px 2px; border-radius:20px; border:1.5px solid #d1d5db;
+                   background:#fff; color:#6b7280; font-size:11px; cursor:pointer; transition:all 0.15s;">
+            🙂 평범해요
+          </button>
+          <button id="feedbackBtn2" onclick="selectFeedback(2)"
+            style="padding:7px 2px; border-radius:20px; border:1.5px solid #fca5a5;
+                   background:#fff; color:#dc2626; font-size:11px; cursor:pointer; transition:all 0.15s;">
+            😕 조금 아쉬워요
+          </button>
+          <button id="feedbackBtn1" onclick="selectFeedback(1)"
+            style="padding:7px 2px; border-radius:20px; border:1.5px solid #f9a8d4;
+                   background:#fff; color:#db2777; font-size:11px; cursor:pointer; transition:all 0.15s;">
+            😞 전혀 아니에요
           </button>
         </div>
         <label style="display:flex; align-items:center; gap:6px; font-size:15px; color:#6b7280; cursor:pointer; margin-bottom:6px;">
@@ -2006,17 +2023,30 @@
   window._feedbackSent = false;
   window._pendingScore = null;
 
-  // 좋아요/별로예요 선택 — 전송 전 변경 가능
+  const _FB_OPTIONS = [
+    { id: 'feedbackBtn1', score: 1, base: '#db2777', border: '#f9a8d4', sel: '#f472b6' },
+    { id: 'feedbackBtn2', score: 2, base: '#dc2626', border: '#fca5a5', sel: '#fca5a5' },
+    { id: 'feedbackBtn3', score: 3, base: '#6b7280', border: '#d1d5db', sel: '#9ca3af' },
+    { id: 'feedbackBtn4', score: 4, base: '#6d28d9', border: '#c4b5fd', sel: '#c4b5fd' },
+    { id: 'feedbackBtn5', score: 5, base: '#7c3aed', border: '#a78bfa', sel: '#a78bfa' },
+  ];
+
   function selectFeedback(score) {
     if (window._feedbackSent) return;
     window._pendingScore = score;
-    const likeBtn    = document.getElementById('feedbackLike');
-    const dislikeBtn = document.getElementById('feedbackDislike');
-    // 선택 초기화 후 선택된 버튼 하이라이트
-    if (likeBtn)    { likeBtn.style.background = '#fff';    likeBtn.style.color = '#7c3aed'; }
-    if (dislikeBtn) { dislikeBtn.style.background = '#fff'; dislikeBtn.style.color = '#db2777'; }
-    if (score >= 4 && likeBtn)    { likeBtn.style.background = '#a78bfa';    likeBtn.style.color = '#fff'; }
-    if (score <= 2 && dislikeBtn) { dislikeBtn.style.background = '#f472b6'; dislikeBtn.style.color = '#fff'; }
+    _FB_OPTIONS.forEach(opt => {
+      const btn = document.getElementById(opt.id);
+      if (!btn) return;
+      if (opt.score === score) {
+        btn.style.background = opt.sel;
+        btn.style.borderColor = opt.sel;
+        btn.style.color = '#fff';
+      } else {
+        btn.style.background = '#fff';
+        btn.style.borderColor = opt.border;
+        btn.style.color = opt.base;
+      }
+    });
   }
 
   // 전송 버튼 — 선택된 점수 + 메모 + 착용 여부 전송
