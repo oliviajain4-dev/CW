@@ -54,6 +54,8 @@ from db import (
     get_db, is_postgres, save_feedback, save_style_log,
     # 누적 학습 관련 헬퍼 (2026-04-17)
     save_correction, save_wardrobe_item_with_embedding,
+    # 피드백 성장 루프 (2026-04-17)
+    get_feedback_summary, get_style_report,
     save_item_feedback, find_similar_items,
 )
 from voice.router import router as voice_router
@@ -869,6 +871,29 @@ async def wardrobe_correct(item_id: int, request: Request):
     return JSONResponse({"ok": True, "mode": "corrected"})
 
 
+@app.post("/feedback/style/{log_id}", name="feedback_style")
+async def feedback_style(log_id: int, request: Request):
+    """
+    오늘의 코디 추천 전체에 대한 피드백 저장.
+    body: {"score": 5, "text": "오늘 딱 좋았어", "was_worn": true}
+    score: 1(싫어요) ~ 5(좋아요). 단순 좋아요/싫어요는 score=5/1 로 전송.
+    """
+    _require_user(request)
+    data = await request.json()
+    score    = data.get("score")
+    text     = data.get("text") or None
+    was_worn = data.get("was_worn")
+    save_feedback(log_id, score=score, text=text, was_worn=was_worn)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/style-report", name="api_style_report")
+def api_style_report(request: Request):
+    """프로필 페이지 '스타일 리포트' — 피드백 통계 + 카테고리 선호도."""
+    user = _require_user(request)
+    return JSONResponse(get_style_report(user.id))
+
+
 @app.post("/feedback/item/{rec_item_id}", name="feedback_item")
 async def feedback_item(rec_item_id: int, request: Request):
     """
@@ -1114,14 +1139,18 @@ async def api_recommend(request: Request, quick: bool = False):
                 tpo = _detected
 
         trend_news: list = []
+        # 피드백 히스토리 → Claude 프롬프트 컨텍스트로 주입
+        feedback_summary = get_feedback_summary(user.id)
+
         outfit_result = await asyncio.to_thread(
             get_outfit_comment, weather, style_rec, layering, str(tpo),  # type: ignore[arg-type]
-            profile or None, wardrobe_for_ai, trend_news, calendar_events
+            profile or None, wardrobe_for_ai, trend_news, calendar_events,
+            feedback_summary or None
         )
         comment = outfit_result.get("comment", "") if isinstance(outfit_result, dict) else outfit_result
         bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
 
-        save_style_log(user.id, weather, style_rec, layering, comment, tpo)
+        style_log_id = save_style_log(user.id, weather, style_rec, layering, comment, tpo)
 
         user_profile_data = {
             "name":        profile.get("name", ""),
@@ -1134,11 +1163,12 @@ async def api_recommend(request: Request, quick: bool = False):
             "tpo":         profile.get("tpo", "일상"),
         }
         full_result = {**quick_result, "comment": comment, "bubbles": bubbles,
-                       "user_profile": user_profile_data}
+                       "user_profile": user_profile_data,
+                       "style_log_id": style_log_id}
         _recommend_cache[cache_key_full] = {"data": full_result, "ts": time.time()}
         return JSONResponse(full_result)
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": str(e), "error_type": type(e).__name__}, status_code=500)
 
 
 @app.get("/api/wardrobe", name="api_wardrobe")
@@ -1227,7 +1257,7 @@ async def api_shopping(request: Request):
         )
         return JSONResponse({"cards": cards})
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
+        return JSONResponse({"error": str(e), "error_type": type(e).__name__}, status_code=500)
 
 
 # ══════════════════════════════════════════════════════════════════

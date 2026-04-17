@@ -15,6 +15,13 @@ from collections import defaultdict
 load_dotenv()
 CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
 
+
+def _require_claude_api_key() -> None:
+    if not CLAUDE_API_KEY:
+        raise RuntimeError(
+            "CLAUDE_API_KEY 환경변수가 설정되지 않았습니다. 배포 환경 또는 .env 파일에서 값을 확인해주세요."
+        )
+
 _TYPE_LABEL = {"missing": "없는 아이템", "upgrade": "업그레이드", "trend": "트렌드"}
 
 
@@ -30,6 +37,7 @@ def get_shopping_needs(wardrobe_items: list, style_rec: dict,
       ...
     ]
     """
+    _require_claude_api_key()
     client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 
     # 옷장 정리

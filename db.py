@@ -12,6 +12,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")  # Docker에서 주입
+if not DATABASE_URL:
+    pg_user = os.getenv("POSTGRES_USER")
+    pg_pass = os.getenv("POSTGRES_PASSWORD")
+    pg_db = os.getenv("POSTGRES_DB")
+    pg_host = os.getenv("POSTGRES_HOST", "db")
+    pg_port = os.getenv("POSTGRES_PORT", "5432")
+    if pg_user and pg_pass and pg_db:
+        DATABASE_URL = f"postgresql://{pg_user}:{pg_pass}@{pg_host}:{pg_port}/{pg_db}"
 _USE_POSTGRES = bool(DATABASE_URL)
 
 
@@ -103,6 +111,29 @@ def is_postgres() -> bool:
 
 def db_engine() -> str:
     return "PostgreSQL" if _USE_POSTGRES else "SQLite"
+
+
+def _ensure_recommendation_items_columns(conn) -> None:
+    """PostgreSQL에서 recommendation_items 스키마가 최신인지 확인합니다."""
+    if not _USE_POSTGRES:
+        return
+
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = %s
+              AND column_name IN ('user_liked', 'was_worn')
+            """,
+            ('recommendation_items',)
+        )
+        existing = {row[0] for row in cur.fetchall()}
+
+        if 'user_liked' not in existing:
+            cur.execute("ALTER TABLE recommendation_items ADD COLUMN user_liked BOOLEAN")
+        if 'was_worn' not in existing:
+            cur.execute("ALTER TABLE recommendation_items ADD COLUMN was_worn BOOLEAN")
 
 
 # ── 스타일 로그 저장 (누적 데이터 핵심) ──────────────────────────
@@ -307,6 +338,7 @@ def save_item_feedback(rec_item_id: int, liked: bool = None,
     if not _USE_POSTGRES or not rec_item_id:
         return
     with get_db() as conn:
+        _ensure_recommendation_items_columns(conn)
         execute(conn, """
             UPDATE recommendation_items
             SET user_liked = COALESCE(%s, user_liked),
@@ -357,3 +389,99 @@ def find_similar_items(embedding: list, user_id=None, limit: int = 20,
 
     with get_db() as conn:
         return fetchall(conn, sql, tuple(params))
+
+
+# ── 피드백 기반 성장 루프 헬퍼 (2026-04-17 추가) ──────────────────
+
+
+def get_feedback_summary(user_id, limit: int = 10) -> str:
+    """
+    최근 피드백 히스토리를 요약 → Claude 프롬프트 컨텍스트로 주입.
+    피드백이 없으면 빈 문자열 반환 (프롬프트에 포함 안 함).
+    """
+    if not _USE_POSTGRES or not user_id:
+        return ""
+
+    with get_db() as conn:
+        rows = fetchall(conn, """
+            SELECT feedback_score, feedback_text, was_worn, tpo,
+                   style_rec->>'condition_label' AS weather_label
+            FROM style_logs
+            WHERE user_id = %s AND feedback_score IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (user_id, limit))
+
+    if not rows:
+        return ""
+
+    likes    = [r for r in rows if r.get("feedback_score") and r["feedback_score"] >= 4]
+    dislikes = [r for r in rows if r.get("feedback_score") and r["feedback_score"] <= 2]
+    worn     = sum(1 for r in rows if r.get("was_worn"))
+
+    from collections import Counter
+    parts = [f"【사용자 피드백 히스토리 — 추천 시 반드시 반영】"]
+    parts.append(f"최근 {len(rows)}회 피드백: 만족 {len(likes)}회 / 불만족 {len(dislikes)}회 / 실제 착용 {worn}회")
+
+    if likes:
+        tpos = [r["tpo"] for r in likes if r.get("tpo")]
+        if tpos:
+            top_tpo = Counter(tpos).most_common(1)[0][0]
+            parts.append(f"만족도 높은 상황: {top_tpo}")
+
+    recent_texts = [r["feedback_text"] for r in rows[:3] if r.get("feedback_text")]
+    if recent_texts:
+        parts.append("최근 피드백 메모: " + " / ".join(recent_texts[:2]))
+
+    return "\n".join(parts)
+
+
+def get_style_report(user_id) -> dict:
+    """
+    프로필 페이지 '스타일 리포트' 데이터.
+    총 추천/피드백 통계 + 카테고리별 선호도 + AI 분류 정확도.
+    """
+    if not _USE_POSTGRES or not user_id:
+        return {}
+
+    with get_db() as conn:
+        stats = fetchone(conn, """
+            SELECT
+                COUNT(*)                                                     AS total,
+                COUNT(feedback_score)                                        AS feedback_count,
+                COALESCE(SUM(CASE WHEN feedback_score >= 4 THEN 1 ELSE 0 END), 0) AS likes,
+                COALESCE(SUM(CASE WHEN feedback_score <= 2 THEN 1 ELSE 0 END), 0) AS dislikes,
+                COALESCE(SUM(CASE WHEN was_worn THEN 1 ELSE 0 END), 0)       AS worn_count,
+                ROUND(AVG(feedback_score)::numeric, 1)                       AS avg_score
+            FROM style_logs
+            WHERE user_id = %s
+        """, (user_id,))
+
+        cat_likes = []
+        try:
+            _ensure_recommendation_items_columns(conn)
+            cat_likes = fetchall(conn, """
+                SELECT ri.category, COUNT(*) AS cnt
+                FROM recommendation_items ri
+                JOIN style_logs sl ON ri.style_log_id = sl.id
+                WHERE sl.user_id = %s AND ri.user_liked = true
+                GROUP BY ri.category
+                ORDER BY cnt DESC
+            """, (user_id,))
+        except Exception:
+            cat_likes = []
+
+        correction_stats = fetchone(conn, """
+            SELECT
+                COUNT(*)                                                              AS total_items,
+                COALESCE(SUM(CASE WHEN label_source = 'user_corrected' THEN 1 ELSE 0 END), 0) AS corrected,
+                COALESCE(SUM(CASE WHEN label_source = 'verified'       THEN 1 ELSE 0 END), 0) AS verified
+            FROM wardrobe_items
+            WHERE user_id = %s
+        """, (user_id,))
+
+    return {
+        "stats":            dict(stats)            if stats            else {},
+        "cat_likes":        [dict(r) for r in cat_likes] if cat_likes else [],
+        "correction_stats": dict(correction_stats) if correction_stats else {},
+    }
