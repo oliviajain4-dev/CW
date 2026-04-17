@@ -78,20 +78,33 @@ outer_labels = [
     "padding jacket", "coat", "jacket", "cardigan", "blazer",
     "trench coat", "leather jacket", "denim jacket", "bomber jacket", "no outer"
 ]
+shoe_labels = [
+    "sneakers", "boots", "ankle boots", "high heels", "loafers",
+    "sandals", "oxford shoes", "running shoes", "slip-on shoes", "platform shoes"
+]
+accessory_labels = [
+    "handbag", "backpack", "crossbody bag", "sunglasses", "hat",
+    "baseball cap", "beanie", "scarf", "watch", "necklace",
+    "socks", "knee-high socks", "ankle socks", "stockings",
+]
 
 # ── 통합 분류 테이블 ─────────────────────────────
-# 기존 방식 버그: 그룹별 독립 softmax → 라벨 수가 적은 그룹이 항상 높은 확률
-# (하의 9개 vs 상의 10개 → 하의 uniform max = 1/9 > 상의 1/10 → 하의 편향)
-# 수정: 모든 라벨을 하나의 softmax로 비교 → argmax = 전체에서 가장 유사한 라벨
+# Marqo-FashionSigLIP은 패션 특화 CLIP 모델 — 신발·악세서리도 학습 데이터에 포함됨
+# 모든 라벨을 하나의 softmax로 비교 → argmax = 전체에서 가장 유사한 라벨
 _outer_clf  = [l for l in outer_labels if l != "no outer"]  # 9개
 _dress_clf  = [l for l in dress_labels if l != "no dress"]  # 7개
-_ALL_CLF_LABELS: list[str] = _outer_clf + _dress_clf + top_labels + bottom_labels  # 총 35개
+_ALL_CLF_LABELS: list[str] = (
+    _outer_clf + _dress_clf + top_labels + bottom_labels
+    + shoe_labels + accessory_labels
+)  # 총 59개 (아우터9 + 원피스7 + 상의10 + 하의9 + 신발10 + 악세서리14[양말포함])
 
 _LABEL_TO_CAT: dict[str, str] = {}
-for _l in _outer_clf:    _LABEL_TO_CAT[_l] = "아우터"
-for _l in _dress_clf:    _LABEL_TO_CAT[_l] = "원피스"
-for _l in top_labels:    _LABEL_TO_CAT[_l] = "상의"
-for _l in bottom_labels: _LABEL_TO_CAT[_l] = "하의"
+for _l in _outer_clf:        _LABEL_TO_CAT[_l] = "아우터"
+for _l in _dress_clf:        _LABEL_TO_CAT[_l] = "원피스"
+for _l in top_labels:        _LABEL_TO_CAT[_l] = "상의"
+for _l in bottom_labels:     _LABEL_TO_CAT[_l] = "하의"
+for _l in shoe_labels:       _LABEL_TO_CAT[_l] = "신발"
+for _l in accessory_labels:  _LABEL_TO_CAT[_l] = "악세서리"
 
 # ── 두께 / 질감 매핑 ────────────────────────────
 # 카테고리로 두께·질감 추론
@@ -129,6 +142,39 @@ THICKNESS_MAP = {
     "mini skirt":      {"thickness": "매우얇음",   "warmth": 0, "texture": "mixed"},
     "shorts":          {"thickness": "매우얇음",   "warmth": 0, "texture": "cotton"},
     "dress":           {"thickness": "매우얇음",   "warmth": 0, "texture": "mixed"},
+    "one-piece dress": {"thickness": "매우얇음",   "warmth": 0, "texture": "mixed"},
+    "maxi dress":      {"thickness": "얇음",       "warmth": 0, "texture": "mixed"},
+    "midi dress":      {"thickness": "얇음",       "warmth": 0, "texture": "mixed"},
+    "mini dress":      {"thickness": "매우얇음",   "warmth": 0, "texture": "mixed"},
+    "sundress":        {"thickness": "매우얇음",   "warmth": 0, "texture": "cotton"},
+    "shirt dress":     {"thickness": "얇음",       "warmth": 0, "texture": "cotton"},
+    # 신발 — 보온도: 부츠=3, 앵클부츠=2, 운동화/로퍼/옥스포드/러닝=1, 샌들/힐/플랫=0
+    "boots":           {"thickness": "두꺼움",     "warmth": 3, "texture": "leather"},
+    "ankle boots":     {"thickness": "보통",       "warmth": 2, "texture": "leather"},
+    "sneakers":        {"thickness": "얇음",       "warmth": 1, "texture": "canvas"},
+    "loafers":         {"thickness": "얇음",       "warmth": 1, "texture": "leather"},
+    "oxford shoes":    {"thickness": "얇음",       "warmth": 1, "texture": "leather"},
+    "running shoes":   {"thickness": "얇음",       "warmth": 1, "texture": "synthetic"},
+    "slip-on shoes":   {"thickness": "얇음",       "warmth": 1, "texture": "canvas"},
+    "platform shoes":  {"thickness": "얇음",       "warmth": 1, "texture": "synthetic"},
+    "sandals":         {"thickness": "매우얇음",   "warmth": 0, "texture": "leather"},
+    "high heels":      {"thickness": "매우얇음",   "warmth": 0, "texture": "leather"},
+    # 악세서리 — 스카프=2, 비니/모자=1, 나머지=0
+    "scarf":           {"thickness": "보통",       "warmth": 2, "texture": "wool"},
+    "beanie":          {"thickness": "얇음",       "warmth": 1, "texture": "knit"},
+    "hat":             {"thickness": "얇음",       "warmth": 1, "texture": "wool"},
+    "baseball cap":    {"thickness": "없음",       "warmth": 0, "texture": "cotton"},
+    "handbag":         {"thickness": "없음",       "warmth": 0, "texture": "leather"},
+    "backpack":        {"thickness": "없음",       "warmth": 0, "texture": "synthetic"},
+    "crossbody bag":   {"thickness": "없음",       "warmth": 0, "texture": "leather"},
+    "sunglasses":      {"thickness": "없음",       "warmth": 0, "texture": "none"},
+    "watch":           {"thickness": "없음",       "warmth": 0, "texture": "none"},
+    "necklace":        {"thickness": "없음",       "warmth": 0, "texture": "none"},
+    # 양말 (악세서리로 분류)
+    "knee-high socks": {"thickness": "보통",       "warmth": 2, "texture": "cotton"},
+    "socks":           {"thickness": "얇음",       "warmth": 1, "texture": "cotton"},
+    "stockings":       {"thickness": "매우얇음",   "warmth": 1, "texture": "nylon"},
+    "ankle socks":     {"thickness": "얇음",       "warmth": 0, "texture": "cotton"},
     # 기본값
     "없음":            {"thickness": "없음",       "warmth": 0, "texture": "none"},
 }
@@ -183,7 +229,7 @@ def analyze_outfit(image_path, remove_bg=True):
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
         # ── 통합 softmax로 카테고리 결정 ───────────────────────────────
-        # 35개 라벨 전체를 하나의 softmax → argmax = 가장 유사한 라벨
+        # 59개 라벨 전체를 하나의 softmax → argmax = 가장 유사한 라벨
         if "all_clf" not in _text_features_cache:
             tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
             feats  = _model.encode_text(tokens)   # type: ignore[operator]
@@ -191,7 +237,7 @@ def analyze_outfit(image_path, remove_bg=True):
             _text_features_cache["all_clf"] = feats
 
         all_feats = _text_features_cache["all_clf"]
-        all_probs = (image_features @ all_feats.T).softmax(dim=-1)[0]  # (35,)
+        all_probs = (image_features @ all_feats.T).softmax(dim=-1)[0]  # (59,)
         best_idx  = int(all_probs.argmax())
 
         final_item     = _ALL_CLF_LABELS[best_idx]
@@ -232,17 +278,17 @@ def analyze_outfit_batch(image_paths: list) -> list:
         image_features = _model.encode_image(batch)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        # 통합 텍스트 임베딩 캐시 (35개 라벨, 최초 1회만 계산)
+        # 통합 텍스트 임베딩 캐시 (59개 라벨, 최초 1회만 계산)
         if "all_clf" not in _text_features_cache:
             tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
             feats  = _model.encode_text(tokens)   # type: ignore[operator]
             feats  = feats / feats.norm(dim=-1, keepdim=True)
             _text_features_cache["all_clf"] = feats
 
-        all_feats = _text_features_cache["all_clf"]  # (35, D)
+        all_feats = _text_features_cache["all_clf"]  # (59, D)
 
-        # 한 번에 N×35 유사도 계산
-        all_probs = (image_features @ all_feats.T).softmax(dim=-1)  # (N, 35)
+        # 한 번에 N×59 유사도 계산
+        all_probs = (image_features @ all_feats.T).softmax(dim=-1)  # (N, 59)
 
         for i in range(len(image_paths)):
             best_idx       = int(all_probs[i].argmax())

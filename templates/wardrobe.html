@@ -70,7 +70,7 @@
        ondrop="onDrop(event, '{{ cat_name }}')">
 
     <h2>
-      {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% elif cat_name == '원피스' %}👗{% else %}🧥{% endif %}
+      {% if cat_name == '상의' %}👕{% elif cat_name == '하의' %}👖{% elif cat_name == '원피스' %}👗{% elif cat_name == '아우터' %}🧥{% elif cat_name == '신발' %}👟{% else %}💍{% endif %}
       {{ cat_name }}
       <span style="font-size:12px;color:#bbb;font-weight:400;">({{ items|length }}개)</span>
       <span class="drop-hint">← 여기로 드래그</span>
