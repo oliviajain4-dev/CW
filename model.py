@@ -2,8 +2,14 @@
 model.py — 이미지 분석 핵심 모듈
 - 배경 제거 (rembg)
 - 전처리 (resize, normalize)
-- Marqo-FashionSigLIP 분석
+- Marqo-FashionSigLIP 분석 (feature extractor로 고정)
 - 카테고리 기반 두께/질감 추론
+
+[2026-04-17 확장] 누적 학습 파이프라인 연동
+- get_image_embedding() : pgvector에 저장할 임베딩 벡터 반환
+- analyze_outfit()      : custom classifier(training/)가 있으면 우선 사용,
+                          없으면 기존 Marqo 59-label softmax로 fallback
+- 모델 전체는 건드리지 않음 — feature extractor로만 활용
 """
 
 import os
@@ -60,6 +66,43 @@ def _ensure_model():
 
 # ── 텍스트 임베딩 사전 캐시 (라벨은 고정이므로 한 번만 계산) ──
 _text_features_cache = {}
+
+# ── Custom Classifier (training/ 파이프라인이 만든 경량 모델) ────
+# retrain_classifier.py 실행 후 training/checkpoints/<tag>/model.joblib 생성됨
+# 추론 시 최신 active 버전을 로드해서 Marqo softmax 대신 사용
+# 파일이 없으면 None → 기존 Marqo 59-label 방식으로 fallback
+_custom_classifier = None
+_custom_classifier_meta: dict = {}
+
+def _try_load_custom_classifier() -> bool:
+    """
+    training/classifier.py의 CustomClassifier 로더를 사용해서
+    현재 active 모델을 메모리에 올린다. DB에 active 버전이 없거나
+    파일이 없으면 False 반환 → 기존 softmax fallback.
+    """
+    global _custom_classifier, _custom_classifier_meta
+    if _custom_classifier is not None:
+        return True
+    try:
+        from training.classifier import CustomClassifier  # type: ignore[import]
+        clf = CustomClassifier.load_active()
+        if clf is None:
+            return False
+        _custom_classifier = clf
+        _custom_classifier_meta = clf.meta
+        print(f"[model.py] Custom classifier 로드 완료: {clf.meta}")
+        return True
+    except Exception as e:
+        # training 모듈 자체가 없거나 DB 연결 불가 → 조용히 fallback
+        print(f"[model.py] custom classifier 로드 스킵 ({e}) → Marqo softmax fallback")
+        return False
+
+
+def invalidate_custom_classifier():
+    """재학습 후 서버에 새 모델을 반영하고 싶을 때 호출 (app.py의 admin 엔드포인트에서 사용 가능)."""
+    global _custom_classifier, _custom_classifier_meta
+    _custom_classifier = None
+    _custom_classifier_meta = {}
 
 # ── 라벨 정의 ───────────────────────────────────
 top_labels = [
@@ -201,17 +244,44 @@ def preprocess_image(image_path, remove_bg=False, target_size=(224, 224)):
 
     return image
 
+# ── 이미지 임베딩만 뽑기 (pgvector/retrieval용) ──────────────────
+def get_image_embedding(image_path) -> list:
+    """
+    이미지 한 장의 정규화된 임베딩 벡터를 Python list로 반환.
+    DB(pgvector) 저장용 — wardrobe_items.embedding 컬럼에 바로 넣을 수 있는 형태.
+
+    SigLIP-B/16 기준 768 차원. 모델을 바꾸면 차원이 달라지므로
+    docker/init.sql의 vector(768) 선언도 함께 업데이트해야 함.
+    """
+    if not TORCH_AVAILABLE or not PIL_AVAILABLE:
+        raise RuntimeError("AI 분석 모듈(torch/PIL)이 설치되지 않았습니다.")
+    _ensure_model()
+    image = preprocess_image(image_path)
+    tensor = _preprocess(image).unsqueeze(0)  # type: ignore[operator]
+    with torch.no_grad():  # type: ignore[attr-defined]
+        feats = _model.encode_image(tensor)  # type: ignore[operator]
+        feats = feats / feats.norm(dim=-1, keepdim=True)
+        return feats[0].cpu().numpy().astype("float32").tolist()
+
+
 # ── Marqo 분석 ──────────────────────────────────
-def analyze_outfit(image_path, remove_bg=True):
+def analyze_outfit(image_path, remove_bg=True, return_embedding: bool = False):
     """
     이미지 분석 후 카테고리 + 두께 + 질감 반환
+
+    동작 순서:
+      1. Marqo 모델로 이미지 임베딩 추출 (항상 수행)
+      2. training/에서 학습한 custom classifier가 있으면 그걸로 예측
+      3. 없으면 기존 Marqo 59-label softmax로 fallback
+      4. return_embedding=True 이면 임베딩도 반환 (DB 저장 시 활용)
 
     반환 형식:
     {
         "상의":   {"item": "knit sweater", "thickness": "두꺼움", "warmth": 3, "texture": "knit"},
-        "하의":   {"item": "jeans",        "thickness": "보통",   "warmth": 2, "texture": "denim"},
-        "아우터": {"item": "coat",         "thickness": "두꺼움", "warmth": 4, "texture": "wool"},
-        "총_보온도": 9   ← warmth 합산 (날씨 연동할 때 활용)
+        "총_보온도": 3,
+        "_confidence": 0.87,       ← argmax softmax 확률 (추가됨)
+        "_source":    "marqo"      ← 'marqo' 또는 'custom_v1_...'
+        "_embedding": [...]        ← return_embedding=True인 경우만
     }
     """
     if not TORCH_AVAILABLE or not PIL_AVAILABLE:
@@ -222,26 +292,42 @@ def analyze_outfit(image_path, remove_bg=True):
     image = preprocess_image(image_path, remove_bg=remove_bg)
     tensor = _preprocess(image).unsqueeze(0)  # type: ignore[operator]
     result: dict = {}
-    total_warmth = 0
 
     with torch.no_grad():  # type: ignore[attr-defined]
         image_features = _model.encode_image(tensor)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-        # ── 통합 softmax로 카테고리 결정 ───────────────────────────────
-        # 59개 라벨 전체를 하나의 softmax → argmax = 가장 유사한 라벨
-        if "all_clf" not in _text_features_cache:
-            tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
-            feats  = _model.encode_text(tokens)   # type: ignore[operator]
-            feats  = feats / feats.norm(dim=-1, keepdim=True)
-            _text_features_cache["all_clf"] = feats
+        # numpy로 한 번 변환해두면 custom classifier든 DB저장이든 재활용 가능
+        emb_np = image_features[0].cpu().numpy().astype("float32")
 
-        all_feats = _text_features_cache["all_clf"]
-        all_probs = (image_features @ all_feats.T).softmax(dim=-1)[0]  # (59,)
-        best_idx  = int(all_probs.argmax())
+        use_custom = _try_load_custom_classifier()
+        final_item: str
+        final_category: str
+        confidence: float
+        source: str
 
-        final_item     = _ALL_CLF_LABELS[best_idx]
-        final_category = _LABEL_TO_CAT[final_item]
+        if use_custom and _custom_classifier is not None:
+            # ── 경량 분류기 경로 (누적 학습 결과) ─────────────────────
+            pred = _custom_classifier.predict_one(emb_np)
+            final_item     = pred["item_type"]
+            final_category = pred["category"]
+            confidence     = float(pred.get("confidence", 0.0))
+            source         = f"custom:{_custom_classifier_meta.get('version_tag', '?')}"
+        else:
+            # ── Fallback: 기존 59-label softmax ─────────────────────
+            if "all_clf" not in _text_features_cache:
+                tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
+                feats  = _model.encode_text(tokens)   # type: ignore[operator]
+                feats  = feats / feats.norm(dim=-1, keepdim=True)
+                _text_features_cache["all_clf"] = feats
+
+            all_feats = _text_features_cache["all_clf"]
+            all_probs = (image_features @ all_feats.T).softmax(dim=-1)[0]  # (59,)
+            best_idx  = int(all_probs.argmax())
+            final_item     = _ALL_CLF_LABELS[best_idx]
+            final_category = _LABEL_TO_CAT[final_item]
+            confidence     = float(all_probs[best_idx].item())
+            source         = "marqo"
 
         info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
         result[final_category] = {
@@ -250,16 +336,22 @@ def analyze_outfit(image_path, remove_bg=True):
             "warmth":    info["warmth"],
             "texture":   info["texture"],
         }
-        total_warmth = info["warmth"]
+        result["총_보온도"]   = info["warmth"]
+        result["_confidence"] = round(confidence, 4)
+        result["_source"]     = source
+        if return_embedding:
+            result["_embedding"] = emb_np.tolist()
 
-    result["총_보온도"] = total_warmth
     return result
 
 # ── 배치 분석 (여러 장 한 번에) ─────────────────────────────────────
-def analyze_outfit_batch(image_paths: list) -> list:
+def analyze_outfit_batch(image_paths: list, return_embedding: bool = False) -> list:
     """
     여러 이미지를 배치로 한 번에 분석.
     encode_image를 N번 → 1번으로 줄여 CPU 추론 시간 대폭 단축.
+
+    - custom classifier가 로드되어 있으면 우선 사용, 없으면 59-label softmax
+    - return_embedding=True면 각 결과에 _embedding 포함 → wardrobe_items.embedding 저장용
 
     반환: analyze_outfit()과 동일한 dict의 리스트
     """
@@ -273,12 +365,40 @@ def analyze_outfit_batch(image_paths: list) -> list:
     batch   = torch.stack(tensors)  # type: ignore[attr-defined]
 
     results = []
+    use_custom = _try_load_custom_classifier()
+
     with torch.no_grad():  # type: ignore[attr-defined]
         # N장을 한 번의 forward pass로 처리
         image_features = _model.encode_image(batch)  # type: ignore[operator]
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+        emb_np_all = image_features.cpu().numpy().astype("float32")  # (N, D)
 
-        # 통합 텍스트 임베딩 캐시 (59개 라벨, 최초 1회만 계산)
+        if use_custom and _custom_classifier is not None:
+            # ── 경량 분류기로 일괄 예측 ───────────────────────────────
+            preds = _custom_classifier.predict_batch(emb_np_all)
+            for i, pred in enumerate(preds):
+                final_item     = pred["item_type"]
+                final_category = pred["category"]
+                confidence     = float(pred.get("confidence", 0.0))
+                source         = f"custom:{_custom_classifier_meta.get('version_tag', '?')}"
+                info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
+                res_dict: dict = {
+                    final_category: {
+                        "item":      final_item,
+                        "thickness": info["thickness"],
+                        "warmth":    info["warmth"],
+                        "texture":   info["texture"],
+                    },
+                    "총_보온도":   info["warmth"],
+                    "_confidence": round(confidence, 4),
+                    "_source":     source,
+                }
+                if return_embedding:
+                    res_dict["_embedding"] = emb_np_all[i].tolist()
+                results.append(res_dict)
+            return results
+
+        # ── Fallback: 기존 59-label softmax 경로 ───────────────────
         if "all_clf" not in _text_features_cache:
             tokens = _tokenizer(_ALL_CLF_LABELS)  # type: ignore[operator]
             feats  = _model.encode_text(tokens)   # type: ignore[operator]
@@ -286,30 +406,34 @@ def analyze_outfit_batch(image_paths: list) -> list:
             _text_features_cache["all_clf"] = feats
 
         all_feats = _text_features_cache["all_clf"]  # (59, D)
-
-        # 한 번에 N×59 유사도 계산
         all_probs = (image_features @ all_feats.T).softmax(dim=-1)  # (N, 59)
 
         for i in range(len(image_paths)):
             best_idx       = int(all_probs[i].argmax())
             final_item     = _ALL_CLF_LABELS[best_idx]
             final_category = _LABEL_TO_CAT[final_item]
+            confidence     = float(all_probs[i, best_idx].item())
 
             info = THICKNESS_MAP.get(final_item, {"thickness": "보통", "warmth": 1, "texture": "mixed"})
-            results.append({
+            res_dict = {
                 final_category: {
                     "item":      final_item,
                     "thickness": info["thickness"],
                     "warmth":    info["warmth"],
                     "texture":   info["texture"],
                 },
-                "총_보온도": info["warmth"],
-            })
+                "총_보온도":   info["warmth"],
+                "_confidence": round(confidence, 4),
+                "_source":     "marqo",
+            }
+            if return_embedding:
+                res_dict["_embedding"] = emb_np_all[i].tolist()
+            results.append(res_dict)
 
     return results
 
 
-# ── 보온도 기반 계절 추론 ────────────────────────
+# ── 보온도 기반 계절 추론 ────────────────────────────────────────
 def infer_season(warmth_score):
     """
     총 보온도로 계절 추론

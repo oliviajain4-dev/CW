@@ -94,9 +94,14 @@
         <div class="item-info">
           <span class="item-type">{{ item['item_type'] }}</span>
         </div>
-        <div style="padding:0 5px 6px;">
+        <div style="padding:0 5px 6px; display:flex; gap:4px;">
+          <!-- 정정(수정) 버튼 — label_source='user_corrected' 학습 데이터 생성 -->
+          <button type="button" class="btn btn-sm" style="flex:1;background:#e0e7ff;color:#4338ca;"
+                  onclick="openCorrectModal({{ item['id'] }}, '{{ item['item_type'] }}', '{{ item['category'] }}')">
+            ✏️ 수정
+          </button>
           <form method="POST" action="{{ url_for('wardrobe_delete', item_id=item['id']) }}"
-                onsubmit="return confirm('삭제할까요?')">
+                onsubmit="return confirm('삭제할까요?')" style="flex:1;">
             <button type="submit" class="btn btn-danger btn-sm btn-full">삭제</button>
           </form>
         </div>
@@ -167,5 +172,143 @@ function onDrop(e, toCat) {
   })
   .catch(() => alert('이동 중 오류가 발생했어요.'));
 }
+
+// ══════════════════════════════════════════════════════════════
+// 라벨 정정 모달 — 사용자 정정 데이터는 누적 학습의 골드 라벨
+// (training/build_dataset.py가 label_source='user_corrected' 행만 사용)
+// ══════════════════════════════════════════════════════════════
+// 카테고리별 대표 item_type 선택지 (model.py의 라벨 집합과 동일)
+const ITEM_OPTIONS = {
+  '상의':    ['t-shirt','blouse','shirt','hoodie','knit sweater','crop top',
+             'tank top','turtleneck','long sleeve shirt','sweatshirt'],
+  '하의':    ['jeans','slacks','long skirt','mini skirt','pleated skirt',
+             'wide pants','shorts','midi skirt','leggings'],
+  '원피스':  ['dress','one-piece dress','maxi dress','midi dress',
+             'mini dress','sundress','shirt dress'],
+  '아우터':  ['padding jacket','coat','jacket','cardigan','blazer',
+             'trench coat','leather jacket','denim jacket','bomber jacket'],
+  '신발':    ['sneakers','boots','ankle boots','high heels','loafers',
+             'sandals','oxford shoes','running shoes','slip-on shoes','platform shoes'],
+  '악세서리':['handbag','backpack','crossbody bag','sunglasses','hat',
+             'baseball cap','beanie','scarf','watch','necklace',
+             'socks','knee-high socks','ankle socks','stockings'],
+};
+
+let correctItemId = null;
+
+function openCorrectModal(itemId, currentType, currentCat) {
+  correctItemId = itemId;
+  document.getElementById('correctCurrentType').textContent = currentType;
+  document.getElementById('correctCurrentCat').textContent  = currentCat;
+  const catSel = document.getElementById('correctCategory');
+  catSel.value = currentCat;
+  renderItemTypeOptions(currentCat, currentType);
+  document.getElementById('correctModal').style.display = 'flex';
+}
+
+function closeCorrectModal() {
+  document.getElementById('correctModal').style.display = 'none';
+  correctItemId = null;
+}
+
+function renderItemTypeOptions(cat, selected) {
+  const sel = document.getElementById('correctItemType');
+  sel.innerHTML = '';
+  (ITEM_OPTIONS[cat] || []).forEach(it => {
+    const o = document.createElement('option');
+    o.value = it;
+    o.textContent = it;
+    if (it === selected) o.selected = true;
+    sel.appendChild(o);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const catSel = document.getElementById('correctCategory');
+  if (catSel) {
+    catSel.addEventListener('change', (e) => {
+      renderItemTypeOptions(e.target.value, null);
+    });
+  }
+});
+
+function submitCorrection() {
+  if (!correctItemId) return;
+  const newCat  = document.getElementById('correctCategory').value;
+  const newType = document.getElementById('correctItemType').value;
+  fetch(`/wardrobe/correct/${correctItemId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ category: newCat, item_type: newType })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { closeCorrectModal(); location.reload(); }
+    else alert('저장 실패: ' + (data.error || ''));
+  })
+  .catch(() => alert('저장 중 오류가 발생했어요.'));
+}
+
+function submitVerify() {
+  if (!correctItemId) return;
+  fetch(`/wardrobe/correct/${correctItemId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ verify: true })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.ok) { closeCorrectModal(); location.reload(); }
+  })
+  .catch(() => alert('저장 중 오류가 발생했어요.'));
+}
 </script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     라벨 정정 모달 (2026-04-17 추가 — 누적 학습용)
+     ═══════════════════════════════════════════════════════════ -->
+<div id="correctModal" style="display:none;position:fixed;inset:0;
+     background:rgba(0,0,0,0.5);z-index:10000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:24px 28px;min-width:320px;
+       max-width:420px;box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+    <h3 style="margin:0 0 8px;font-size:18px;">✏️ 분류 정정</h3>
+    <p style="color:#666;font-size:13px;margin:0 0 16px;">
+      현재 분류가 맞지 않다면 고쳐주세요.<br>
+      정정 데이터는 AI가 나연님의 옷장에 맞게 <b>계속 학습</b>하는 데 쓰입니다.
+    </p>
+    <div style="font-size:13px;color:#999;margin-bottom:12px;">
+      현재: <b id="correctCurrentCat"></b> / <b id="correctCurrentType"></b>
+    </div>
+
+    <label style="display:block;font-size:13px;margin-bottom:4px;">카테고리</label>
+    <select id="correctCategory" style="width:100%;padding:8px;border:1px solid #ddd;
+            border-radius:8px;margin-bottom:12px;">
+      <option value="상의">상의</option>
+      <option value="하의">하의</option>
+      <option value="원피스">원피스</option>
+      <option value="아우터">아우터</option>
+      <option value="신발">신발</option>
+      <option value="악세서리">악세서리</option>
+    </select>
+
+    <label style="display:block;font-size:13px;margin-bottom:4px;">세부 아이템</label>
+    <select id="correctItemType" style="width:100%;padding:8px;border:1px solid #ddd;
+            border-radius:8px;margin-bottom:16px;"></select>
+
+    <div style="display:flex;gap:8px;">
+      <button onclick="submitVerify()" class="btn btn-sm"
+              style="flex:1;background:#d1fae5;color:#065f46;">
+        ✓ 분류가 맞아요
+      </button>
+      <button onclick="submitCorrection()" class="btn btn-primary btn-sm" style="flex:1;">
+        수정 저장
+      </button>
+      <button onclick="closeCorrectModal()" class="btn btn-sm"
+              style="flex:0 0 60px;background:#eee;color:#666;">
+        취소
+      </button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}

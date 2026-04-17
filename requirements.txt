@@ -61,3 +61,16 @@ huggingface_hub
 tqdm
 psutil
 rich
+
+# ── 누적 학습 파이프라인 (2026-04-17 추가) ─────────
+# retrain_classifier.py + training/ 폴더가 사용
+# - pgvector       : Postgres에 이미지 임베딩 저장/유사도 검색
+# - scikit-learn   : 경량 분류기(LogisticRegression/MLP) 학습
+# - lightgbm       : 선택적 고성능 분류기 (train.py --model lightgbm)
+# - joblib         : 학습된 모델 직렬화
+# - pyarrow        : pandas.to_parquet 백엔드 (training/datasets/*.parquet)
+pgvector
+scikit-learn
+lightgbm
+joblib
+pyarrow

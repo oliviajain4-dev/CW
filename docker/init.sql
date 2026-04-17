@@ -6,6 +6,7 @@
 -- ── 확장 ─────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";  -- UUID 생성
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";    -- 텍스트 유사도 검색
+CREATE EXTENSION IF NOT EXISTS "vector";     -- pgvector: 이미지 임베딩 저장/검색 (retrieval)
 
 -- ================================================================
 -- 1. 사용자 (고객) 테이블
@@ -51,6 +52,34 @@ CREATE TABLE IF NOT EXISTS wardrobe_items (
 
 CREATE INDEX IF NOT EXISTS idx_wardrobe_user_id ON wardrobe_items(user_id);
 CREATE INDEX IF NOT EXISTS idx_wardrobe_category ON wardrobe_items(category);
+
+-- ── 2-1. 누적 학습용 추가 컬럼 (2026-04-17 추가) ────────────────
+-- 목적: 모델이 예측한 라벨과 사용자가 정정한 라벨을 분리 저장
+--       → 정정 데이터가 쌓이면 분류기 재학습 시 정답 레이블로 사용
+-- 기존 category/item_type 컬럼은 "최종값(현재 UI에 표시)"으로 계속 활용
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS predicted_category  VARCHAR(10);
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS predicted_item_type VARCHAR(50);
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS predicted_confidence REAL;        -- argmax softmax 확률
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS corrected_category  VARCHAR(10);  -- 사용자가 정정한 경우만 채움
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS corrected_item_type VARCHAR(50);  -- 사용자가 정정한 경우만 채움
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS corrected_at        TIMESTAMPTZ;
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS label_source        VARCHAR(20) DEFAULT 'auto';
+    -- 'auto'           : 모델 예측 그대로
+    -- 'user_corrected' : 사용자가 UI에서 정정 (학습 데이터 후보)
+    -- 'verified'       : 사용자가 "맞다"고 명시적으로 확인 (골드 라벨)
+
+-- 이미지 임베딩 저장 (pgvector) → retrieval 기반 추천에 즉시 활용
+-- Marqo-FashionSigLIP 출력 차원 = 768 (ViT-B/16 SigLIP 기반)
+-- 차원이 다른 모델로 교체 시 ALTER 필요
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS embedding vector(768);
+ALTER TABLE wardrobe_items ADD COLUMN IF NOT EXISTS embedding_model VARCHAR(60) DEFAULT 'marqo-fashionSigLIP';
+
+-- 이미지 임베딩 유사도 검색용 인덱스 (코사인 거리, IVFFlat)
+-- 레코드가 충분히 쌓이면 (>1000) 성능이 뚜렷하게 좋아짐
+CREATE INDEX IF NOT EXISTS idx_wardrobe_embedding ON wardrobe_items
+    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 50);
+
+CREATE INDEX IF NOT EXISTS idx_wardrobe_label_source ON wardrobe_items(label_source);
 
 -- ================================================================
 -- 3. 날씨 로그 테이블
@@ -108,7 +137,49 @@ CREATE TABLE IF NOT EXISTS recommendation_items (
     style_log_id  INTEGER REFERENCES style_logs(id) ON DELETE CASCADE,
     wardrobe_item_id INTEGER REFERENCES wardrobe_items(id) ON DELETE SET NULL,
     category      VARCHAR(10),   -- 상의/하의/아우터
-    item_type     VARCHAR(50)    -- DB에 없는 경우 텍스트로 저장
+    item_type     VARCHAR(50),   -- DB에 없는 경우 텍스트로 저장
+    -- 아이템 단위 피드백 (2026-04-17 추가) → re-ranker 학습 라벨
+    user_liked    BOOLEAN,       -- NULL=무반응 / true=좋아요 / false=싫어요
+    was_worn      BOOLEAN,       -- 실제 착용했는지 (강한 긍정 신호)
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rec_items_log ON recommendation_items(style_log_id);
+CREATE INDEX IF NOT EXISTS idx_rec_items_liked ON recommendation_items(user_liked);
+
+-- ================================================================
+-- 5-1. 모델 버전/학습 이력 (2026-04-17 추가)
+--      training/ 파이프라인이 재학습할 때마다 이력을 남김
+--      → 추론 시 최신 버전 로드, A/B 테스트 시 특정 버전 고정 가능
+-- ================================================================
+CREATE TABLE IF NOT EXISTS classifier_versions (
+    id             SERIAL PRIMARY KEY,
+    version_tag    VARCHAR(40) UNIQUE NOT NULL,   -- 예: 'v1_20260417', 'canary_...'
+    model_type     VARCHAR(30) NOT NULL,          -- 'logreg' / 'lightgbm' / 'mlp'
+    target         VARCHAR(30) NOT NULL,          -- 'category' / 'item_type'
+    checkpoint_path TEXT NOT NULL,                -- training/checkpoints/v1_.../model.joblib
+    n_train        INTEGER,
+    n_val          INTEGER,
+    accuracy       REAL,
+    top3_accuracy  REAL,
+    notes          TEXT,
+    is_active      BOOLEAN DEFAULT FALSE,         -- 추론 시 현재 사용 중인 버전
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_classifier_active ON classifier_versions(is_active, target);
+
+-- ================================================================
+-- 5-2. 학습 데이터셋 스냅샷 (감사/재현용)
+-- ================================================================
+CREATE TABLE IF NOT EXISTS training_runs (
+    id              SERIAL PRIMARY KEY,
+    run_tag         VARCHAR(40) UNIQUE NOT NULL,
+    snapshot_path   TEXT,                          -- training/datasets/run_tag.parquet
+    label_source_filter VARCHAR(30),               -- 'user_corrected,verified' 등
+    n_samples       INTEGER,
+    label_distribution JSONB,
+    created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ================================================================
