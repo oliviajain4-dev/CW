@@ -45,3 +45,6 @@ NotoSansKR.ttf
 
 # Google OAuth 클라이언트 시크릿 (절대 커밋 금지)
 google_client_secret.json
+
+# Cowork 앱 폴더 (팀 프로젝트와 무관한 별개 Git 저장소)
+clawd-on-desk/
