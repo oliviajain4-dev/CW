@@ -17,7 +17,7 @@
 <button class="sidebar-btn" onclick="togglePanel('shoppingPanel')" id="btn-shopping">
   🛍<span class="btn-label">쇼핑</span>
 </button>
-<button class="sidebar-btn" onclick="togglePanel('calendarPanel'); loadCalendar();" id="btn-calendar">
+<button class="sidebar-btn" onclick="toggleCalendarWidget()" id="btn-calendar">
   📅<span class="btn-label">일정</span>
 </button>
 <div class="sidebar-divider"></div>
@@ -280,22 +280,35 @@
   <div class="resize-handle" data-dir="nw"></div>
 </div>
 
-<!-- ⑥ 캘린더 패널 -->
-<div class="panel" id="calendarPanel">
-  <div class="panel-header">📅 오늘 일정
-    <button class="panel-close" onclick="closePanel('calendarPanel')">✕</button>
+<!-- ⑥ 오늘 일정 — 우상단 고정 토글 위젯 -->
+<div id="calendarWidget" style="
+  position: fixed;
+  top: 60px;
+  right: 18px;
+  width: 250px;
+  z-index: 1100;
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+  border: 1px solid rgba(167,139,250,0.25);
+">
+  <div style="
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 15px;
+    user-select: none;
+    font-size: 20px; font-weight: 700; color: #5b21b6;
+  ">
+    <span onclick="toggleCalendarWidget()" style="flex:1; cursor:pointer;">📅 오늘 일정 <a href="https://calendar.google.com" target="_blank" onclick="event.stopPropagation()" style="font-size:20px; color:#7c3aed; text-decoration:none; vertical-align:middle;" title="구글 캘린더 열기">↗️</a></span>
+    <span id="calendarChevron" onclick="toggleCalendarWidget()" style="font-size:11px; transition:transform 0.25s; display:inline-block; transform:rotate(180deg); cursor:pointer;">▼</span>
   </div>
-  <div class="panel-body" id="calendarBody">
-    <p class="empty-msg" style="color:#aaa;">⏳ 일정 불러오는 중...</p>
+  <div id="calendarWidgetBody" style="display:block; border-top:1px solid rgba(167,139,250,0.18);">
+    <div id="calendarBody" style="padding:12px 14px; font-size:12px; max-height:320px; overflow-y:auto;">
+      <p class="empty-msg" style="color:#aaa;">⏳ 일정 불러오는 중...</p>
+    </div>
   </div>
-  <div class="resize-handle" data-dir="n"></div>
-  <div class="resize-handle" data-dir="ne"></div>
-  <div class="resize-handle" data-dir="e"></div>
-  <div class="resize-handle" data-dir="se"></div>
-  <div class="resize-handle" data-dir="s"></div>
-  <div class="resize-handle" data-dir="sw"></div>
-  <div class="resize-handle" data-dir="w"></div>
-  <div class="resize-handle" data-dir="nw"></div>
 </div>
 
 
@@ -569,6 +582,24 @@
   const TYPE_COLOR = { missing: '#e05080', upgrade: '#f0a030', trend: '#7755aa' };
   const TYPE_ICON = { missing: '❗', upgrade: '⬆️', trend: '✨' };
 
+  // ── 오늘 일정 위젯 토글 ────────────────────────────────────────────
+  window._calendarWidgetLoaded = false;
+  function toggleCalendarWidget() {
+    const body    = document.getElementById('calendarWidgetBody');
+    const chevron = document.getElementById('calendarChevron');
+    if (!body) return;
+    const isOpen = body.style.display !== 'none';
+    body.style.display = isOpen ? 'none' : '';
+    if (chevron) chevron.style.transform = isOpen ? '' : 'rotate(180deg)';
+  }
+  // 페이지 로드 시 캘린더 바로 로드 (기본 펼침 상태)
+  document.addEventListener('DOMContentLoaded', function() {
+    if (!window._calendarWidgetLoaded) {
+      loadCalendar();
+      window._calendarWidgetLoaded = true;
+    }
+  });
+
   // ── 캘린더 일정 로드 ──────────────────────────────────────────────
   function loadCalendar() {
     const el = document.getElementById('calendarBody');
@@ -581,8 +612,8 @@
           el.innerHTML = `
             <div style="text-align:center;padding:16px 8px;">
               <div style="font-size:32px;margin-bottom:8px;">📅</div>
-              <p style="color:#aaa;font-size:13px;margin-bottom:12px;">구글 계정으로 로그인하면<br>이번 주 일정을 자동으로 불러와요</p>
-              <a href="/auth/google" class="btn btn-primary btn-full">🔗 구글 캘린더 연동</a>
+              <p style="color:#aaa;font-size:13px;margin-bottom:12px;">구글 캘린더를 연동하면<br>일정에 맞는 코디를 추천해드려요</p>
+              <a href="/auth/google/calendar" class="btn btn-primary btn-full">🔗 구글 캘린더 연동</a>
             </div>`;
           return;
         }

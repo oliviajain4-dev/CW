@@ -630,6 +630,40 @@ async def auth_google_callback(request: Request):
     return RedirectResponse("/", status_code=302)
 
 
+@app.get("/auth/google/calendar", name="auth_google_calendar")
+async def auth_google_calendar(request: Request):
+    """로그인된 사용자가 구글 캘린더만 별도 연동할 때 사용 (로그인 방식 무관)"""
+    _require_user(request)
+    if not _GOOGLE_ENABLED or not _oauth:
+        flash(request, "Google 캘린더 연동이 설정되지 않았습니다.", "error")
+        return RedirectResponse("/", status_code=302)
+    redirect_uri = str(request.url_for("auth_google_calendar_callback"))
+    # 캘린더 읽기 권한만 요청 (로그인 없이)
+    return await _oauth.google.authorize_redirect(
+        request,
+        redirect_uri,
+        scope="https://www.googleapis.com/auth/calendar.readonly",
+    )
+
+
+@app.get("/auth/google/calendar/callback", name="auth_google_calendar_callback")
+async def auth_google_calendar_callback(request: Request):
+    """캘린더 연동 콜백 — access_token만 세션에 저장, 로그인 상태 유지"""
+    _require_user(request)
+    if not _GOOGLE_ENABLED or not _oauth:
+        return RedirectResponse("/", status_code=302)
+    try:
+        token = await _oauth.google.authorize_access_token(request)
+        access_token: str | None = token.get("access_token")
+    except Exception as e:
+        flash(request, f"구글 캘린더 연동 오류: {e}", "error")
+        return RedirectResponse("/", status_code=302)
+    if access_token:
+        request.session["google_access_token"] = access_token
+        flash(request, "구글 캘린더가 연동되었어요! 🗓️", "success")
+    return RedirectResponse("/", status_code=302)
+
+
 @app.get("/api/calendar", name="api_calendar")
 async def api_calendar(request: Request):
     """이번 주 구글 캘린더 일정 반환. 구글 로그인 필요."""
