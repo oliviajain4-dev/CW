@@ -8,8 +8,9 @@ tests/test_voice.py — 음성 파이프라인 3종 독립 검증 스크립트
 
 항목:
   [1] Google TTS  — ko-KR-Neural2-B 음성, PCM 정상 반환 여부
-  [2] Gemini Live — TEXT 모드 텍스트 응답 정상 수신 여부
-  [3] clean_for_tts — 기호·영어 제거·변환 정확도
+  [2] clean_for_tts — 기호·영어 제거·변환 정확도
+
+참고: Gemini Live 검증은 제거됨 (REDESIGN.md — Claude 단일화로 음성 LLM 대체).
 """
 
 import asyncio
@@ -103,108 +104,10 @@ async def test_tts():
 
 
 # ════════════════════════════════════════════════════════════════════
-# [2] Gemini Live TEXT 모드 테스트
-# ════════════════════════════════════════════════════════════════════
-async def test_gemini():
-    section("[2] Gemini Live — TEXT 모드 응답")
-
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        fail("GEMINI_API_KEY 없음 → .env 확인")
-        return False
-
-    try:
-        from google import genai
-        from google.genai import types
-    except ImportError:
-        fail("google-genai 패키지 미설치 → pip install google-genai")
-        return False
-
-    client = genai.Client(api_key=api_key)
-    config = types.LiveConnectConfig(
-        response_modalities=["TEXT"],
-        system_instruction=types.Content(
-            parts=[types.Part(text=(
-                "너는 코디 전문가야. 두 문장 이내로 한국어로만 짧게 답해. "
-                "기호, 이모지, 영어 절대 사용 금지."
-            ))]
-        ),
-    )
-
-    received_text = ""
-    chunk_count   = 0
-
-    try:
-        async with client.aio.live.connect(
-            model="gemini-2.0-flash-live-001", config=config
-        ) as session:
-
-            ok("Gemini Live WebSocket 연결 성공")
-
-            # 텍스트 입력으로 테스트 (오디오 없이도 응답 확인 가능)
-            await session.send(
-                input="오늘 청바지에 뭐 입으면 좋아? 날씨가 좀 쌀쌀해.",
-                end_of_turn=True,
-            )
-            ok("텍스트 입력 전송 완료")
-
-            async for response in session.receive():
-                # 텍스트 청크 수집 (SDK 버전에 따라 두 경로 모두 체크)
-                chunk = None
-                if hasattr(response, "text") and response.text:
-                    chunk = response.text
-                elif (
-                    response.server_content
-                    and response.server_content.model_turn
-                    and response.server_content.model_turn.parts
-                ):
-                    for part in response.server_content.model_turn.parts:
-                        if hasattr(part, "text") and part.text:
-                            chunk = (chunk or "") + part.text
-
-                if chunk:
-                    received_text += chunk
-                    chunk_count   += 1
-
-                # 오디오 청크가 오면 경고 (TEXT 모드인데 AUDIO가 오면 안 됨)
-                if (
-                    response.server_content
-                    and response.server_content.model_turn
-                ):
-                    for part in response.server_content.model_turn.parts:
-                        if hasattr(part, "inline_data") and part.inline_data:
-                            fail("⚠️  오디오 청크 수신됨 — response_modalities가 TEXT가 아닐 수 있음")
-
-                if response.server_content and response.server_content.turn_complete:
-                    ok("turn_complete 신호 수신")
-                    break
-
-    except Exception as e:
-        fail(f"Gemini Live 연결/수신 오류 — {e}")
-        return False
-
-    if not received_text:
-        fail("텍스트 응답 없음 — response_modalities=['TEXT'] 설정 재확인 필요")
-        return False
-
-    ok(f"텍스트 청크 {chunk_count}개 수신")
-    ok(f"응답 내용: {received_text.strip()[:120]}")
-
-    # 검증 — 기호 포함 여부
-    bad_chars = [c for c in ["*", "_", "#", "-", "—", "•"] if c in received_text]
-    if bad_chars:
-        print(f"  ⚠️  기호 포함됨 {bad_chars} → clean_for_tts()가 처리할 예정")
-    else:
-        ok("기호 없음 — clean_for_tts() 부담 최소")
-
-    return True
-
-
-# ════════════════════════════════════════════════════════════════════
-# [3] clean_for_tts 정확도 테스트
+# [2] clean_for_tts 정확도 테스트
 # ════════════════════════════════════════════════════════════════════
 def test_clean_for_tts():
-    section("[3] clean_for_tts — 기호·영어 정제 검증")
+    section("[2] clean_for_tts — 기호·영어 정제 검증")
 
     try:
         from voice.pipeline import clean_for_tts
@@ -263,10 +166,7 @@ async def main():
     # [1] TTS
     results["Google TTS"] = await test_tts()
 
-    # [2] Gemini Live
-    results["Gemini Live TEXT"] = await test_gemini()
-
-    # [3] clean_for_tts (동기)
+    # [2] clean_for_tts (동기)
     results["clean_for_tts"] = test_clean_for_tts()
 
     # 최종 요약

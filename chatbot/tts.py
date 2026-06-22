@@ -261,6 +261,10 @@ async def synthesize_speech(text: str) -> bytes:
     GOOGLE_TTS_API_KEY 환경변수 필요.
     """
     api_key = os.getenv("GOOGLE_TTS_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "GOOGLE_TTS_API_KEY 환경변수가 설정되지 않았습니다. .env 파일에서 값을 확인해주세요."
+        )
     payload = {
         "input": {"text": text},
         "voice": _TTS_VOICE,

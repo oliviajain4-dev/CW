@@ -41,7 +41,9 @@ def run(nx: int = 62, ny: int = 123, sensitivity: int = 3,
         print(f"\n⚠️  {layering['layering_tip']}")
 
     print("\nAI 코멘트 생성 중...")
-    comment = get_outfit_comment(weather, style_rec, layering, tpo, user_profile)
+    result = get_outfit_comment(weather, style_rec, layering, tpo, user_profile)
+    # get_outfit_comment은 {"comment": str, "bubbles": dict} 를 반환
+    comment = result.get("comment", "") if isinstance(result, dict) else result
     print(f"\n💬 수석 디자이너 코멘트:\n{comment}")
 
 

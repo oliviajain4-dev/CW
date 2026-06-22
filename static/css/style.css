@@ -841,6 +841,22 @@ body {
 }
 #designerPanel.voice-active .designer-col-divider { display: block; }
 
+/* 가로 구분선 — 코멘트 영역 높이 드래그 조절 핸들 (JS가 음성 ON 시 표시) */
+.designer-divider {
+  height: 7px;
+  margin: 4px 0;
+  border-radius: 4px;
+  cursor: ns-resize;
+  background-color: rgba(167,139,250,0.25);
+  background-image: radial-gradient(circle, rgba(124,92,196,0.55) 1px, transparent 1px);
+  background-size: 8px 7px;
+  background-position: center;
+  transition: background-color 0.15s ease;
+  flex-shrink: 0;
+}
+.designer-divider:hover,
+.designer-divider.is-dragging { background-color: rgba(167,139,250,0.5); }
+
 /* 우측 컬럼 — 티키타카 (기본 숨김, ON 시 표시) */
 .designer-right-col {
   display: none;

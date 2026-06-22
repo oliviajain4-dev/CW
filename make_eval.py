@@ -8,7 +8,7 @@ make_eval.py — Marqo FashionSigLIP 정확도 평가 스크립트
   4. tests/원피스/ 에 원피스 사진 넣기
   5. python make_eval.py
 
-결과: tests/eval_result.txt 로 저장됨
+결과: tests/eval_result.json 로 저장됨
 """
 
 import os

@@ -223,7 +223,10 @@ CLAUDE_API_KEY=...         # Anthropic Claude API (발급 완료)
 GOOGLE_TTS_API_KEY=...     # Google Cloud TTS (chatbot/tts.py)
 GOOGLE_CLIENT_ID=...       # Google OAuth 로그인
 GOOGLE_CLIENT_SECRET=...   # Google OAuth 로그인
-CLOUDINARY_URL=...         # 이미지 클라우드 저장
+CLOUDINARY_CLOUD_NAME=...  # 이미지 클라우드 저장 (코드는 3개 분리 변수를 읽음)
+CLOUDINARY_API_KEY=...     # Cloudinary API Key
+CLOUDINARY_API_SECRET=...  # Cloudinary API Secret
+FLASK_SECRET_KEY=...       # 세션 서명 키 (SessionMiddleware)
 ```
 
 ---

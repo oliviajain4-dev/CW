@@ -93,9 +93,10 @@ def build_wardrobe():
         print(f"  분석 중: {img_file}")
         result = analyze_outfit(img_path)
 
+        # analyze_outfit은 예측된 단일 카테고리 키만 반환 → 존재하는 것만 처리
         for category in ["상의", "하의", "아우터"]:
-            info = result[category]
-            if info["item"] == "없음":
+            info = result.get(category)
+            if not info or info.get("item") == "없음":
                 continue
             conn.execute("""
                 INSERT INTO wardrobe

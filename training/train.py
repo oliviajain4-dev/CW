@@ -105,9 +105,15 @@ def train_classifier(snapshot_path: str,
     # 클래스별 샘플이 너무 적으면 stratify 불가 → 자동 비활성화
     min_per_class = int(np.bincount(y_enc).min())
     stratify = y_enc if min_per_class >= 2 else None
-    X_tr, X_val, y_tr, y_val = train_test_split(
-        X, y_enc, test_size=0.2, random_state=42, stratify=stratify
-    )
+    try:
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X, y_enc, test_size=0.2, random_state=42, stratify=stratify
+        )
+    except ValueError:
+        # 클래스 수가 많아 test_size로는 계층 분할 불가 → 비계층 분할로 폴백
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X, y_enc, test_size=0.2, random_state=42, stratify=None
+        )
 
     # ── 3. 모델 학습 ──
     if model_type == "logreg":

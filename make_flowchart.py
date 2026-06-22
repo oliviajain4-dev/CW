@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 내 옷장의 코디 — 기술 스택 흐름도 (2D)
-diagrams + Graphviz 기반 전문 아이콘 다이어그램
+matplotlib + PIL 기반 다이어그램 (외부 Graphviz 불필요)
 """
 import os, sys, io
-os.environ["PATH"] += r";C:\Program Files\Graphviz\bin"
 
 import requests as _req
 

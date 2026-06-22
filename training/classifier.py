@@ -165,13 +165,19 @@ class CustomClassifier:
             print(f"[CustomClassifier] 체크포인트 파일 없음: {ckpt}")
             return None
 
-        import joblib
-        bundle = joblib.load(ckpt)
-        meta = {
-            "version_tag":  row["version_tag"],
-            "model_type":   row["model_type"],
-            "target":       row["target"],
-            "accuracy":     float(row.get("accuracy") or 0.0),
-            "top3_accuracy": row.get("top3_accuracy"),
-        }
-        return cls(bundle, meta)
+        # 손상/버전 불일치 체크포인트는 None을 반환해 호출부가 Marqo softmax로 폴백하게 함
+        # (docstring 계약: "반환 None → fallback")
+        try:
+            import joblib
+            bundle = joblib.load(ckpt)
+            meta = {
+                "version_tag":  row["version_tag"],
+                "model_type":   row["model_type"],
+                "target":       row["target"],
+                "accuracy":     float(row.get("accuracy") or 0.0),
+                "top3_accuracy": row.get("top3_accuracy"),
+            }
+            return cls(bundle, meta)
+        except Exception as e:
+            print(f"[CustomClassifier] 체크포인트 로드 실패({ckpt}): {e}")
+            return None

@@ -21,9 +21,11 @@ def get_outfit_comment(weather_data: dict, style_rec: dict,
                        wardrobe_items: list = None,
                        trend_news: list = None,
                        calendar_events: list = None,
-                       feedback_summary: str = None) -> str:
+                       feedback_summary: str = None) -> dict:
     """
     수석 디자이너 코멘트 — 실제 옷장 아이템 기반 맞춤 스타일링
+
+    반환: {"comment": str, "bubbles": dict}
 
     wardrobe_items: [
         {"category": "상의", "item_type": "crop top", "warmth": 0, "texture": "mixed"},

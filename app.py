@@ -58,6 +58,7 @@ from db import (
     # 피드백 성장 루프 (2026-04-17)
     get_feedback_summary, get_style_report,
     save_item_feedback, find_similar_items,
+    save_recommendation_items,
 )
 from voice.router import router as voice_router
 
@@ -582,13 +583,18 @@ async def auth_google(request: Request):
     if not _GOOGLE_ENABLED or not _oauth:
         flash(request, "Google 로그인이 설정되지 않았습니다.", "error")
         return RedirectResponse("/login", status_code=302)
+    if not is_postgres():
+        # 콜백이 %s 플레이스홀더/RETURNING을 쓰므로 SQLite에서는 지원 불가
+        flash(request, "Google 로그인은 PostgreSQL 환경에서만 지원됩니다.", "error")
+        return RedirectResponse("/login", status_code=302)
     redirect_uri = str(request.url_for("auth_google_callback"))
     return await _oauth.google.authorize_redirect(request, redirect_uri)
 
 
 @app.get("/auth/google/callback", name="auth_google_callback")
 async def auth_google_callback(request: Request):
-    if not _GOOGLE_ENABLED or not _oauth:
+    if not _GOOGLE_ENABLED or not _oauth or not is_postgres():
+        # 아래 쿼리는 Postgres 전용(%s/RETURNING) — SQLite에서는 콜백 진입 차단
         return RedirectResponse("/login", status_code=302)
     try:
         token     = await _oauth.google.authorize_access_token(request)
@@ -1188,6 +1194,18 @@ async def api_recommend(request: Request, quick: bool = False):
         bubbles = outfit_result.get("bubbles", {}) if isinstance(outfit_result, dict) else {}
 
         style_log_id = save_style_log(user.id, weather, style_rec, layering, comment, tpo)
+
+        # 추천된 옷장 아이템을 recommendation_items에 연결 저장
+        # (style_logs ↔ wardrobe_items 매핑 → top_outfits_by_weather VIEW·재랭킹 학습 입력)
+        if style_log_id:
+            rec_items = [
+                {"wardrobe_item_id": entry["id"], "category": cat,
+                 "item_type": entry["item_type"]}
+                for cat, entries in wardrobe_matches.items()
+                for entry in entries
+            ]
+            if rec_items:
+                save_recommendation_items(style_log_id, rec_items)
 
         user_profile_data = {
             "name":        profile.get("name", ""),

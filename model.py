@@ -468,7 +468,9 @@ if __name__ == "__main__":
 
                 result = analyze_outfit(img_path)
 
-                for part in ["상의", "하의", "아우터"]:
+                # analyze_outfit은 예측된 단일 카테고리 키 하나만 반환 → 존재하는 것만 출력
+                for part in [k for k in result
+                             if k not in ("총_보온도", "_confidence", "_source", "_embedding")]:
                     info = result[part]
                     print(f"{part:5}: {info['item']:20} "
                           f"두께:{info['thickness']:6} "
