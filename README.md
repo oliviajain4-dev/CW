@@ -29,6 +29,12 @@
 
 (프로젝트 폴더에서 실행 → `cd CW && docker-compose up` &nbsp;또는&nbsp; `cd CW && uvicorn app:app --host 0.0.0.0 --port 8000`)
 
+<br/>
+
+<img src="docs/screenshots/dashboard.jpg" width="820" alt="내 옷장의 코디 — 메인 대시보드 미리보기"/>
+
+<sub>✨ 실제 웹 대시보드 화면 · 더 많은 화면은 ↓ <a href="#-데모--스크린샷">데모 & 스크린샷</a></sub>
+
 </div>
 
 ---
@@ -88,19 +94,19 @@
 
 ## 🖥️ 데모 & 스크린샷
 
-> 📸 아래 자리표시자를 실제 캡처로 교체하세요. `docs/screenshots/` 폴더를 만들고 이미지를 넣은 뒤 경로만 바꾸면 됩니다.
+> 📸 로컬 서버(`localhost:8000`)에서 실제 캡처한 화면입니다.
 
 <div align="center">
 
-| 메인 대시보드 | AI 수석 디자이너 패널 |
+| AI 수석 디자이너 (음성) | 오늘의 추천 코디 |
 |:---:|:---:|
-| <img src="docs/screenshots/dashboard.png" width="420" alt="대시보드"/> | <img src="docs/screenshots/designer.png" width="420" alt="수석 디자이너 패널"/> |
-| 날씨·오늘의 코디·3D 캐릭터 | 음성 대화 + 옷장 아이템 직접 언급 |
+| <img src="docs/screenshots/designer.jpg" width="400" alt="AI 수석 디자이너 패널"/> | <img src="docs/screenshots/recommend.jpg" width="400" alt="오늘의 추천 코디"/> |
+| 마이크 ON → 음성 대화·끼어들기·이어읽기 | 추천 아이템 / 피할 아이템 자동 매칭 |
 
-| 옷장 관리 | 음성 인터랙션 (티키타카) |
+| 실시간 날씨 (기상청) | 내 옷장 관리 |
 |:---:|:---:|
-| <img src="docs/screenshots/wardrobe.png" width="420" alt="옷장"/> | <img src="docs/screenshots/voice.png" width="420" alt="음성 대화"/> |
-| AI 자동 분류 결과 + 사용자 정정 | 마이크 ON → 끼어들기 → 이어읽기 |
+| <img src="docs/screenshots/weather.jpg" width="400" alt="실시간 날씨"/> | <img src="docs/screenshots/wardrobe.jpg" width="400" alt="내 옷장"/> |
+| 아침·낮·저녁 체감온도 단기예보 | AI 자동 분류 + 사용자 정정 업로드 |
 
 </div>
 
