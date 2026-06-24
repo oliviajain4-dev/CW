@@ -27,7 +27,7 @@
 
 <sub>⚠️ 본인 컴퓨터에서 서버를 먼저 실행한 뒤 클릭 → **각자의 로컬 대시보드**가 열립니다 · [실행 방법 보기](#-시작하기)</sub>
 
-(`docker-compose up` &nbsp;또는&nbsp; `uvicorn app:app --host 0.0.0.0 --port 5000`)
+(프로젝트 폴더에서 실행 → `cd CW && docker-compose up` &nbsp;또는&nbsp; `cd CW && uvicorn app:app --host 0.0.0.0 --port 5000`)
 
 </div>
 
@@ -547,7 +547,14 @@ uvicorn app:app --host 0.0.0.0 --port 5000 --reload
 
 🔗 **[http://localhost:5000/dashboard](http://localhost:5000/dashboard)**
 
-(서버 실행: `docker-compose up` &nbsp;또는&nbsp; `uvicorn app:app --host 0.0.0.0 --port 5000`)
+서버 실행 (클론한 프로젝트 폴더에서):
+
+```bash
+cd CW                                        # git clone 한 저장소 폴더로 이동
+docker-compose up                            # 방법 A (권장)
+# 또는
+uvicorn app:app --host 0.0.0.0 --port 5000   # 방법 B
+```
 
 > 📌 이 링크는 **클릭한 사람의 컴퓨터에서 실행 중인 서버**(`localhost`)로 연결됩니다 — 외부에 배포된 공용 주소가 아닙니다. 따라서 팀원 각자 위 **방법 A/B로 서버를 먼저 실행**해야 하며, 서버가 꺼져 있으면 브라우저에 "연결할 수 없음"이 표시됩니다. (로그인 안 되어 있으면 로그인 화면을 거쳐 대시보드로 진입)
 
