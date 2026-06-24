@@ -28,7 +28,7 @@ services:
     container_name: codi_web
     restart: unless-stopped
     ports:
-      - "5000:5000"
+      - "8002:8002"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-codi}
       POSTGRES_USER: ${POSTGRES_USER:-codi_user}
@@ -54,7 +54,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app:app --host 0.0.0.0 --port 5000
+    command: uvicorn app:app --host 0.0.0.0 --port 8002
 
 volumes:
   postgres_data:

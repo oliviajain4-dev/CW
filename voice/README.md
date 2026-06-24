@@ -132,8 +132,8 @@ WS   /voice/ws   → Gemini Live 실시간 대화 (메인)
 python app.py
 
 # 접속
-http://localhost:5000/voice    ← 음성 채팅 전용 UI
-http://localhost:5000          ← 기존 웹 UI
+http://localhost:8002/voice    ← 음성 채팅 전용 UI
+http://localhost:8002          ← 기존 웹 UI
 
 # Docker
 docker-compose up --build

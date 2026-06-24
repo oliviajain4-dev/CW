@@ -30,7 +30,7 @@ COPY . .
 RUN mkdir -p static/uploads
 
 # ── 포트 노출 ─────────────────────────────────────
-EXPOSE 5000
+EXPOSE 8002
 
 # ── 실행 명령 ─────────────────────────────────────
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8002"]

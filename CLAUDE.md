@@ -282,10 +282,10 @@ FLASK_SECRET_KEY=...       # 세션 서명 키 (SessionMiddleware)
 docker-compose up --build
 
 # 로컬 직접 실행 (DB 없이 테스트)
-uvicorn app:app --host 0.0.0.0 --port 5000 --reload
+uvicorn app:app --host 0.0.0.0 --port 8002 --reload
 
 # 접속
-http://localhost:5000
+http://localhost:8002
 
 # 흐름도 재생성
 python make_flowchart.py   # → flowchart/ 폴더에 저장됨
