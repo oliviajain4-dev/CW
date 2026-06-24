@@ -1,5 +1,5 @@
 """
-app.py — 내 옷장의 코디 FastAPI 통합 서버 (포트 5000)
+app.py — 내 옷장의 코디 FastAPI 통합 서버 (포트 8002)
 Flask → FastAPI 마이그레이션 + 음성 파이프라인(voice/router.py) 통합
 
 라우트:
@@ -1344,5 +1344,5 @@ async def proxy_image(url: str):
 
 if __name__ == "__main__":
     import uvicorn
-    print("서버 실행 중: http://127.0.0.1:5000")
-    uvicorn.run("app:app", host="0.0.0.0", port=5000, reload=True)
+    print("서버 실행 중: http://127.0.0.1:8002")
+    uvicorn.run("app:app", host="0.0.0.0", port=8002, reload=True)

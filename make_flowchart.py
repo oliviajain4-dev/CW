@@ -200,7 +200,7 @@ def build():
 
     # ── 노드 배치 (cx, cy) ──────────────────────────────
     #  [사용자 레이어]
-    draw_node(ax,  2.5, 12.1, icons['user'],    '사용자',        'localhost:5000')
+    draw_node(ax,  2.5, 12.1, icons['user'],    '사용자',        'localhost:8002')
     draw_node(ax,  8.5, 12.1, icons['flask'],   'Flask',         'app.py 라우터')
     draw_node(ax, 15.0, 12.1, icons['flask'],   'Flask',         'API / 세션 처리',  icon_size=0.45)
     draw_node(ax, 20.5, 12.1, icons['git'],     'GitHub',        '소스 관리')
@@ -691,7 +691,7 @@ def build_full_stack():
 
     # ════════════════════════════════════════════════════════
     # 사용자 노드 (왼쪽 바깥)
-    draw_node(ax, 1.5, 15.1, IC['user'], '사용자', 'localhost:5000', icon_size=1.0)
+    draw_node(ax, 1.5, 15.1, IC['user'], '사용자', 'localhost:8002', icon_size=1.0)
 
     # ── 화살표 ──────────────────────────────────────────────
     AW = 2.3
