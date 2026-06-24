@@ -1,0 +1,44 @@
+<svg viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" role="img" font-family="var(--font-sans, 'Segoe UI', system-ui, sans-serif)">
+<title>CW My Mini Co-di 데이터 제품 + MLOps 아키텍처</title>
+<desc>옷장 사진 업로드 → 이미지 분류(FashionSigLIP) → DB(pgvector) → 날씨·캘린더 기반 추천 + LLM 코멘트 → 음성 → 사용자. 사용자 정정→재학습→핫스왑의 MLOps 피드백 루프가 분류기를 개선.</desc>
+<defs>
+<marker id="ca" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--color-text-secondary,#6b7280)"/></marker>
+<marker id="ci" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--color-text-info,#4f46e5)"/></marker>
+</defs>
+<text x="360" y="26" text-anchor="middle" font-size="14" font-weight="700" fill="var(--color-text-primary,#1f2328)">CW · My Mini Co-di — 데이터 제품 + MLOps</text>
+<line x1="235" y1="82" x2="235" y2="96" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5" marker-end="url(#ca)"/>
+<line x1="235" y1="140" x2="235" y2="152" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5" marker-end="url(#ca)"/>
+<line x1="235" y1="192" x2="235" y2="204" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5" marker-end="url(#ca)"/>
+<line x1="235" y1="248" x2="235" y2="260" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5" marker-end="url(#ca)"/>
+<line x1="235" y1="304" x2="235" y2="316" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5" marker-end="url(#ca)"/>
+<path d="M430,200 C406,200 406,118 392,118" fill="none" stroke="var(--color-text-info,#4f46e5)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#ci)"/>
+<text x="412" y="165" text-anchor="middle" font-size="8.5" fill="var(--color-text-info,#4f46e5)" transform="rotate(-90 412 165)">피드백 루프</text>
+<rect x="150" y="52" width="170" height="30" rx="15" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-tertiary,#e5e7eb)" stroke-width="1.5"/>
+<text x="235" y="71" text-anchor="middle" font-size="11" fill="var(--color-text-secondary,#6b7280)">옷장 사진 업로드</text>
+<rect x="80" y="96" width="310" height="44" rx="9" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5"/>
+<text x="235" y="116" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--color-text-primary,#1f2328)">이미지 분류 · FashionSigLIP</text>
+<text x="235" y="132" text-anchor="middle" font-size="10" fill="var(--color-text-secondary,#6b7280)">종류 · 보온도 + 768d 임베딩</text>
+<rect x="80" y="152" width="310" height="40" rx="9" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5"/>
+<text x="235" y="176" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--color-text-primary,#1f2328)">DB · PostgreSQL + pgvector</text>
+<rect x="80" y="204" width="310" height="44" rx="9" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5"/>
+<text x="235" y="224" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--color-text-primary,#1f2328)">추천 · 날씨 + 캘린더 규칙</text>
+<text x="235" y="240" text-anchor="middle" font-size="10" fill="var(--color-text-secondary,#6b7280)">+ LLM(Claude) 스타일 코멘트</text>
+<rect x="80" y="260" width="310" height="44" rx="9" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-secondary,#d0d7de)" stroke-width="1.5"/>
+<text x="235" y="280" text-anchor="middle" font-size="12.5" font-weight="600" fill="var(--color-text-primary,#1f2328)">음성 · STT → Claude → TTS</text>
+<text x="235" y="296" text-anchor="middle" font-size="10" fill="var(--color-text-secondary,#6b7280)">barge-in · 코디 이어읽기</text>
+<rect x="150" y="316" width="170" height="30" rx="15" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-tertiary,#e5e7eb)" stroke-width="1.5"/>
+<text x="235" y="335" text-anchor="middle" font-size="11" fill="var(--color-text-secondary,#6b7280)">사용자</text>
+<rect x="430" y="96" width="270" height="208" rx="10" fill="none" stroke="var(--color-text-info,#4f46e5)" stroke-width="1.3" stroke-dasharray="5 4"/>
+<text x="565" y="118" text-anchor="middle" font-size="13" font-weight="700" fill="var(--color-text-primary,#1f2328)">MLOps 피드백 루프</text>
+<rect x="446" y="128" width="238" height="42" rx="7" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-tertiary,#e5e7eb)" stroke-width="1.2"/>
+<text x="565" y="146" text-anchor="middle" font-size="12" font-weight="600" fill="var(--color-text-primary,#1f2328)">사용자 정정 라벨</text>
+<text x="565" y="161" text-anchor="middle" font-size="9.5" fill="var(--color-text-secondary,#6b7280)">predicted vs corrected 분리</text>
+<rect x="446" y="178" width="238" height="46" rx="7" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-tertiary,#e5e7eb)" stroke-width="1.2"/>
+<text x="565" y="196" text-anchor="middle" font-size="12" font-weight="600" fill="var(--color-text-primary,#1f2328)">재학습 · build_dataset → train</text>
+<text x="565" y="212" text-anchor="middle" font-size="9.5" fill="var(--color-text-secondary,#6b7280)">canary guard (정확도 보호)</text>
+<rect x="446" y="232" width="238" height="42" rx="7" fill="var(--color-background-primary,#fff)" stroke="var(--color-border-tertiary,#e5e7eb)" stroke-width="1.2"/>
+<text x="565" y="250" text-anchor="middle" font-size="12" font-weight="600" fill="var(--color-text-primary,#1f2328)">핫스왑 · classifier_versions</text>
+<text x="565" y="265" text-anchor="middle" font-size="9.5" fill="var(--color-text-secondary,#6b7280)">is_active 전환 (무재배포)</text>
+<text x="565" y="290" text-anchor="middle" font-size="9.5" fill="var(--color-text-info,#4f46e5)">정정 데이터가 모델을 개선</text>
+<text x="80" y="376" font-size="10.5" fill="var(--color-text-secondary,#6b7280)"><tspan fill="var(--color-text-info,#4f46e5)" font-weight="600">accent 점선</tspan> = MLOps 피드백 루프 (정정 → 재학습 → 핫스왑)</text>
+</svg>

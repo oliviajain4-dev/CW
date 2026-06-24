@@ -21,6 +21,14 @@
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 ![Status](https://img.shields.io/badge/release-v1.0-success)
 
+<br/>
+
+[![웹 대시보드 열기](https://img.shields.io/badge/🚀_웹_대시보드_열기-localhost:5000-22c55e?style=for-the-badge&logo=fastapi&logoColor=white)](http://localhost:5000/dashboard)
+
+<sub>⚠️ 본인 컴퓨터에서 서버를 먼저 실행한 뒤 클릭 → **각자의 로컬 대시보드**가 열립니다 · [실행 방법 보기](#-시작하기)</sub>
+
+(프로젝트 폴더에서 실행 → `cd CW && docker-compose up` &nbsp;또는&nbsp; `cd CW && uvicorn app:app --host 0.0.0.0 --port 5000`)
+
 </div>
 
 ---
@@ -532,6 +540,23 @@ uvicorn app:app --host 0.0.0.0 --port 5000 --reload
 > 💡 첫 이미지 분석 요청 시 FashionSigLIP(~600MB)을 1회 로드합니다. 모델은 **지연 로딩**되어 서버 기동을 막지 않습니다.
 
 > ⚠️ **로컬(SQLite) vs 운영(PostgreSQL) 동작 차이** — SQLite 폴백은 *Docker 없이 빠르게 띄워 화면을 확인*하기 위한 개발 모드입니다. **벡터 유사 검색, 추천/피드백 로그 저장, 누적 재학습, 구글 OAuth 로그인**은 PostgreSQL(+pgvector) 환경에서만 동작하며, SQLite에서는 해당 기능이 안전하게 비활성화(graceful degrade)됩니다. 전체 기능 검증은 `docker-compose up`으로 진행하세요.
+
+### 🖥️ 대시보드 접속
+
+서버가 뜨면 아래 주소로 대시보드가 열립니다.
+
+🔗 **[http://localhost:5000/dashboard](http://localhost:5000/dashboard)**
+
+서버 실행 (클론한 프로젝트 폴더에서):
+
+```bash
+cd CW                                        # git clone 한 저장소 폴더로 이동
+docker-compose up                            # 방법 A (권장)
+# 또는
+uvicorn app:app --host 0.0.0.0 --port 5000   # 방법 B
+```
+
+> 📌 이 링크는 **클릭한 사람의 컴퓨터에서 실행 중인 서버**(`localhost`)로 연결됩니다 — 외부에 배포된 공용 주소가 아닙니다. 따라서 팀원 각자 위 **방법 A/B로 서버를 먼저 실행**해야 하며, 서버가 꺼져 있으면 브라우저에 "연결할 수 없음"이 표시됩니다. (로그인 안 되어 있으면 로그인 화면을 거쳐 대시보드로 진입)
 
 ---
 
